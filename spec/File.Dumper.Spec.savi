@@ -1,0 +1,70 @@
+:class File.Dumper.Spec
+  :is Spec
+  :const describes: "File.Dumper"
+
+  :it "dumps the given chunks into a file at the given file"
+    dumper = File.Dumper.new
+    // TODO: Generate a random temporary filename to avoid collisions
+    path = File.Path.new(@env.root, "/tmp/savi-file-dumper-test-1")
+
+    dumper.dump_to_file(path.write_only, [b"EXAMPLE"]
+      _ExpectFileDump.for(@ctx, path, File.Result.Success, b"EXAMPLE")
+    )
+
+  :it "fails to dump a file in a directory which doesn't exist"
+    dumper = File.Dumper.new
+    path = File.Path.new(@env.root, "/bogus/path/that/never/exists")
+
+    dumper.dump_to_file(path, [b"EXAMPLE"]
+      _ExpectFileDump.for(@ctx, path, File.Result.PathPrefixNotFound, b"")
+    )
+
+  :it "rejects dumping a file which contains a null byte in its name"
+    dumper = File.Dumper.new
+    path = File.Path.new(@env.root, "/tmp/\0my-file")
+
+    dumper.dump_to_file(path, [b"EXAMPLE"]
+      _ExpectFileDump.for(@ctx, path, File.Result.PathInvalid, b"")
+    )
+
+:actor _ExpectFileDump
+  :let ctx Spec.Context
+  :let expected_path File.Path
+  :let expected_result File.Result
+  :let expected_load_result File.Result
+  :let expected_content Bytes
+  :new _new(@ctx, @expected_path, @expected_result, @expected_content)
+    @expected_load_result = case @expected_result == (
+    | File.Result.Success     | File.Result.Success
+    | File.Result.PathInvalid | File.Result.PathInvalid
+    |                           File.Result.PathNotFound
+    )
+
+  :fun non for(ctx, expected_path, expected_result, expected_content)
+    ctx.wait_for_action(
+      "_ExpectFileDump(\(expected_path.string), \(expected_result))"
+    )
+    @_new(ctx, expected_path, expected_result, expected_content)
+
+  :is File.Dumper.ResultActor
+  :be result_of_dump_to_file(
+    path File.Path.Writable
+    result File.Result
+  )
+    assert: path == @expected_path
+    assert: result == @expected_result
+    File.Loader.new.load_from_file(@expected_path, @)
+
+  :is File.Loader.ResultActor
+  :be result_of_load_from_file(
+    path File.Path.Readable
+    result File.Result
+    content Bytes'iso
+  )
+    assert: path == @expected_path
+    assert: result == @expected_load_result
+    assert: --content == @expected_content
+
+    @ctx.finished_action(
+      "_ExpectFileDump(\(@expected_path.string), \(@expected_result))"
+    )

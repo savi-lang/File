@@ -1,0 +1,167 @@
+:enum File.Result
+  // All good. No error.
+  :member Success 0
+  // TODO:
+  // :with description: "The operation succeeded."
+
+  // This should "never" be seen in the wild. If it is, it's a bug!
+  :member BugInLibrary 1
+  // TODO:
+  // :with description
+  //   "An error occurred that the File library didn't consider to be possible. \
+  //   This is definitely a bug. Please file an issue ticket for the library."
+
+  ///
+  // Some current condition of the file or file system prevents the operation.
+  // It's possible that the condition could change later, when another process
+  // stops using the file, or when some configuration in the system is changed.
+
+  :member AccessDenied 101
+  :member FileSystemIsReadOnly 102
+  :member FileIsSealed 103 // TODO: should these "busy-like" errors that are more likely to suggest a retry be in a separate group?
+  :member FileIsBusy 104 // TODO: should these "busy-like" errors that are more likely to suggest a retry be in a separate group?
+  :member PipeReaderHasClosed 105
+
+  ///
+  // Something about the file makes it inappropriate for this operation.
+  // Choose a different file.
+
+  :member FileIsTooLarge 201
+  :member FileIsNonOpenableDevice 202
+  :member FileIsNonReadableDevice 203
+  :member FileIsLockedPseudoTerminal 204
+
+  ///
+  // The path is wrong in some way.
+  // Choose a different path.
+
+  :member PathInvalid 301
+  :member PathTooLong 302
+  :member PathIsDirectory 303
+  :member PathNotFound 304
+  :member PathPrefixNotFound 305
+  :member PathPrefixIsNotDirectory 306
+
+  ///
+  // Signs of stress, which may come and go intermittently.
+
+  :member DiskQuotaExhausted 401
+  :member DiskSpaceExhausted 402
+  :member MemoryBufferFailed 403
+  :member MemoryBufferExhausted 404
+  :member TooManyFilesOpenInSystem 405
+  :member TooManySymbolicLinksFollowed 406
+  :member TooManyFilesOpenInProcess 407
+  :member LowLevelIOFailed 408
+  :member LowLevelCorruption 409
+
+  :fun description String
+    case @ == (
+    | File.Result.Success |
+      "The operation succeeded."
+
+    | File.Result.BugInLibrary |
+      "An error occurred that the File library didn't consider to be possible. \
+      This is definitely a bug. Please file an issue ticket for the library."
+
+    | File.Result.AccessDenied |
+      "This process does not have permission to access the given path."
+
+    | File.Result.FileSystemIsReadOnly |
+      "The file system where the file is being written is read-only."
+
+    | File.Result.FileIsSealed |
+      "The given file is sealed in a way that prevents this operation."
+
+    | File.Result.FileIsBusy |
+      "The given file is busy in a way that prevents this operation. \
+      For example, it may be an executable that is currently running, \
+      or a swap file that is in use, or a kernel driver being loaded."
+
+    | File.Result.PipeReaderHasClosed |
+      "The reader on the other end of the pipe has closed, so further writing \
+      is not possible. This process may also have received a SIGPIPE signal."
+
+    | File.Result.FileIsTooLarge |
+      "The operation is at too large of an offset in the file, or the file \
+      itself is too large for this process - either because it exceeds the \
+      maximum address space for the program, or because of a file size limit \
+      on the system or the individual process."
+
+    | File.Result.FileIsNonOpenableDevice |
+      "The given file cannot be opened as requested, either because it is a \
+      special device that can never be opened in this way, or it is a FIFO \
+      that cannot be opened for writing when not currently being read from \
+      by another process."
+
+    | File.Result.FileIsNonReadableDevice |
+      "The given file cannot be read as requested."
+
+    | File.Result.FileIsLockedPseudoTerminal |
+      "The given file cannot be opened as requested because it is the \
+      receiving side of a locked pseudo-terminal."
+
+    | File.Result.PathInvalid |
+      "The given path is invalid. This is usually because it contains invalid \
+      characters or is otherwise malformed."
+
+    | File.Result.PathTooLong |
+      "The given path is too long. Reduce the length of the path name."
+
+    | File.Result.PathIsDirectory |
+      "The given path is a directory, but the operation requires a file."
+
+    | File.Result.PathNotFound |
+      "The given path does not exist, so it was not possible to open it."
+
+    | File.Result.PathPrefixNotFound |
+      "A part of the prefix of the given path does not exist, so it was \
+      not possible to create a new file at that path."
+
+    | File.Result.PathPrefixIsNotDirectory |
+      "A part of the prefix of the given path is not a directory, so it was \
+      not possible to create a new file at that path."
+
+    | File.Result.DiskQuotaExhausted |
+      "The disk block and/or inode quota for this process has been exhausted."
+
+    | File.Result.DiskSpaceExhausted |
+      "The disk where the file is being written has run out of space."
+
+    | File.Result.MemoryBufferFailed |
+      "An attempt to allocate a memory buffer (for example, a kernel \
+      buffer or FIFO buffer) failed to complete."
+
+    | File.Result.MemoryBufferExhausted |
+      "There was not enough memory in the buffer (for example, a kernel \
+      buffer or FIFO buffer) to complete the operation."
+
+    | File.Result.TooManyFilesOpenInSystem |
+      "The overall system has too many files and/or sockets currently open. \
+      Perhaps this program is holding too many sockets, or maybe other \
+      processes on the system are holding too many for this one to function. \
+      It may be possible to increase the limit if more files are needed."
+
+    | File.Result.TooManySymbolicLinksFollowed |
+      "While resolving the given path, too many symbolic links were followed. \
+      The path may possibly point to a recursive loop of symbolic links."
+
+    | File.Result.TooManyFilesOpenInProcess |
+      "This process has too many files and/or sockets currently open. \
+      The program may have neglected to drop file descriptors somewhere, or \
+      perhaps it needs to impose explicit limits on itself to prevent this. \
+      It may be possible to increase the limit if more files are needed."
+
+    | File.Result.LowLevelIOFailed |
+      "A low-level I/O failure occurred while synchronizing state with the \
+      underlying file. It may (or may not) help to retry the operation."
+
+    | File.Result.LowLevelCorruption |
+      "A low-level corruption while interacting with the file system \
+      prevented success. It may (or may not) help to retry the operation."
+
+    |
+      // This should be unreachable, if we've covered all the enum members.
+      // We have a test in File.Result.Spec which proves that we did.
+      ""
+    )

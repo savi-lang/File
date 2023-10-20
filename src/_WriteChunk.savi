@@ -1,0 +1,16 @@
+:struct val _WriteChunk
+  // TODO: Platform-specific field order - on Windows writev, size comes first.
+  :let cpointer CPointer(U8)
+  :let size USize
+  :new val from_cpointer(@cpointer, @size)
+  :new val from_bytes(bytes Bytes)
+    @cpointer = bytes.cpointer
+    @size = bytes.size
+
+  :fun val trim_left(from USize)
+    try (
+      size = @size -! from
+      @from_cpointer(@cpointer.offset(from), size)
+    |
+      @from_cpointer(@cpointer.null, 0)
+    )
