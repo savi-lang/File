@@ -1,0 +1,77 @@
+:module _ReadPermission
+:module _WritePermission
+
+:class val File.Path
+  :let string String
+  :new val _new(@string) // (private constructor for security)
+
+  :is File.Path.Readable
+  :fun read_permission: _ReadPermission
+
+  :is File.Path.Writable
+  :fun write_permission: _WritePermission
+
+  :: Using the root of authority, create a path object granting the authority to
+  :: read and write content at the given file path (and subpaths of it).
+  :new val (root Env.Root, @string)
+
+  :: Using this path object as authority, create a path object granting similar
+  :: authority to the given subpath of the original file path.
+  :fun subpath(subpath String'box)
+    File.Path._new("\(@string)/\(subpath)")
+
+  :: Using this path object as authority, create a path object granting
+  :: read-only authority for the same path (and subpaths of it).
+  :fun read_only
+    File.Path.ReadOnly._new(@string)
+
+  :: Using this path object as authority, create a path object granting
+  :: wri-only authority for the same path (and subpaths of it).
+  :fun write_only
+    File.Path.WriteOnly._new(@string)
+
+:class val File.Path.ReadOnly
+  :let string String
+  :new val _new(@string) // (private constructor for security)
+
+  :is File.Path.Readable
+  :fun read_permission: _ReadPermission
+
+  :: Using the root of authority, create a path object granting the authority to
+  :: read content at the given file path (and subpaths of it).
+  :new val (root Env.Root, @string)
+
+  :: Using this path object as authority, create a path object granting similar
+  :: authority to the given subpath of the original file path.
+  :fun subpath(subpath String'box)
+    File.Path.ReadOnly._new("\(@string)/\(subpath)")
+
+:class val File.Path.WriteOnly
+  :let string String
+  :new val _new(@string) // (private constructor for security)
+
+  :is File.Path.Writable
+  :fun write_permission: _WritePermission
+
+  :: Using the root of authority, create a path object granting the authority to
+  :: write content at the given file path (and subpaths of it).
+  :new val (root Env.Root, @string)
+
+  :: Using this path object as authority, create a path object granting similar
+  :: authority to the given subpath of the original file path.
+  :fun subpath(subpath String'box)
+    File.Path.WriteOnly._new("\(@string)/\(subpath)")
+
+:trait val File.Path.Any
+  :let string String
+  :fun "=="(other File.Path.Any'box): @string == other.string
+
+:trait val File.Path.Readable
+  :is File.Path.Any
+  :fun read_permission: _ReadPermission
+  :fun subpath(subpath String'box) File.Path.Readable
+
+:trait val File.Path.Writable
+  :is File.Path.Any
+  :fun write_permission: _WritePermission
+  :fun subpath(subpath String'box) File.Path.Writable

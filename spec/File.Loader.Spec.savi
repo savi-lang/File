@@ -1,0 +1,72 @@
+:class File.Loader.Spec
+  :is Spec
+  :const describes: "File.Loader"
+
+  :it "loads the content of the given file"
+    // TODO: Generate a random temporary filename to avoid collisions
+    path = File.Path.new(@env.root, "/tmp/savi-file-loader-test-1")
+
+    _FileDumpThenFileLoad.new(@ctx, path, b"EXAMPLE"
+      _ExpectFileLoad.for(@ctx, path, File.Result.Success, b"EXAMPLE")
+    )
+
+  :it "fails to load a file which doesn't exist"
+    loader = File.Loader.new
+    path = File.Path.ReadOnly.new(@env.root, "/bogus/path/that/never/exists")
+
+    loader.load_from_file(path
+      _ExpectFileLoad.for(@ctx, path, File.Result.PathNotFound, b"")
+    )
+
+  :it "rejects loading a file which contains a null byte in its name"
+    loader = File.Loader.new
+    path = File.Path.ReadOnly.new(@env.root, "/tmp/\0my-file")
+
+    loader.load_from_file(path
+      _ExpectFileLoad.for(@ctx, path, File.Result.PathInvalid, b"")
+    )
+
+:actor _ExpectFileLoad
+  :let ctx Spec.Context
+  :let expected_path File.Path.Readable
+  :let expected_result File.Result
+  :let expected_content Bytes
+  :new _new(@ctx, @expected_path, @expected_result, @expected_content)
+
+  :fun non for(ctx, expected_path, expected_result, expected_content)
+    ctx.wait_for_action(
+      "_ExpectFileLoad(\(expected_path.string), \(expected_result))"
+    )
+    @_new(ctx, expected_path, expected_result, expected_content)
+
+  :is File.Loader.ResultActor
+  :be result_of_load_from_file(
+    path File.Path.Readable
+    result File.Result
+    content Bytes'iso
+  )
+    assert: path == @expected_path
+    assert: result == @expected_result
+    assert: --content == @expected_content
+    @ctx.finished_action(
+      "_ExpectFileLoad(\(@expected_path.string), \(@expected_result))"
+    )
+
+:actor _FileDumpThenFileLoad
+  :let ctx Spec.Context
+  :let path File.Path
+  :let load_callback File.Loader.ResultActor
+  :new (@ctx, @path, content Bytes, @load_callback)
+    dumper = File.Dumper.new
+    dumper.dump_to_file(@path, [content], @)
+
+  :is File.Dumper.ResultActor
+  :be result_of_dump_to_file(
+    path File.Path.Writable
+    result File.Result
+  )
+    assert: result == File.Result.Success
+    assert: path == @path
+    loader = File.Loader.new
+    loader.load_from_file(@path, @load_callback)
+

@@ -1,0 +1,141 @@
+:module _FFI.Posix
+  :ffi errno OSError
+    :foreign_name pony_os_errno
+
+  :ffi clear_errno None
+    :foreign_name pony_os_clear_errno
+
+  :ffi open(path CPointer(U8), flags I32, mode U32) I32
+  :ffi fsync(fd I32) I32
+  :ffi close(fd I32) I32
+  :ffi read(fd I32, buf CPointer(U8), count USize) ISize
+  :ffi writev(
+    fd I32
+    iovs CPointer(_WriteChunk)
+    iov_count I32
+  ) ISize
+
+  :const o_rdonly I32: 0x00
+  :const o_wronly I32: 0x01
+  :const o_rdwr I32: 0x02
+  :const o_creat I32: 0x40
+  :const o_trunc I32: 0x200
+
+  :fun fstat_get_size!(fd I32) USize
+    case (
+    | Platform.is_linux && Platform.is_64bit | // TODO: && Platform.is_x86
+      linux_x8664 = _FFI.LinuxX8664.Stat.new
+      result = @fstat_linux_x8664(fd, stack_address_of_variable linux_x8664)
+      error! if result == -1
+      linux_x8664.st_size.usize
+    |
+      0
+    )
+
+  :ffi fstat_linux_x8664(fd I32, stat CPointer(_FFI.LinuxX8664.Stat)) I32
+    :foreign_name fstat
+
+
+:struct _FFI.LinuxX8664.Stat
+  :let st_dev U64: 0 // dev_t
+  :let st_ino U64: 0 // ino_t
+  :let st_nlink U64: 0 // nlink_t
+  :let st_mode U32: 0 // mode_t
+  :let st_uid U32: 0 // uid_t
+  :let st_gid U32: 0 // gid_t
+  :let _pad0 I32: 0
+  :let st_rdev U64: 0 // dev_t
+  :let st_size ISize: 0 // off_t
+  :let st_blksize ISize: 0 // blksize_t
+  :let st_blocks ISize: 0 // blkcnt_t
+  :let st_atim ISize: 0
+  :let st_atim_nsec ISize: 0
+  :let st_mtim ISize: 0
+  :let st_mtim_nsec ISize: 0
+  :let st_ctim ISize: 0
+  :let st_ctim_nsec ISize: 0
+  :let _reserved0 ISize: 0
+  :let _reserved1 ISize: 0
+  :let _reserved2 ISize: 0
+
+// :struct _FFI.LinuxArm32.Stat
+//   :let st_dev U64: 0 // dev_t
+//   :let _pad0 I32: 0
+//   :let st_ino U32: 0 // ino_t
+//   :let st_mode U32: 0 // mode_t
+//   :let st_nlink U32: 0 // nlink_t
+//   :let st_uid U32: 0 // uid_t
+//   :let st_gid U32: 0 // gid_t
+//   :let st_rdev U64: 0 // dev_t
+//   :let _pad1 I32: 0
+//   :let st_size ISize: 0 // off_t
+//   :let st_blksize ISize: 0 // blksize_t
+//   :let st_blocks ISize: 0 // blkcnt_t
+//   :let st_atim: ISize
+//   :let st_atim_nsec: ISize
+//   :let st_mtim: ISize
+//   :let st_mtim_nsec: ISize
+//   :let st_ctim: ISize
+//   :let st_ctim_nsec: ISize
+//   :let _reserved0 I64: 0
+
+// :struct _FFI.LinuxArm64.Stat
+//   :let st_dev U64: 0 // dev_t
+//   :let _pad0 I32: 0
+//   :let st_ino U32: 0 // ino_t
+//   :let st_mode U32: 0 // mode_t
+//   :let st_nlink U32: 0 // nlink_t
+//   :let st_uid U32: 0 // uid_t
+//   :let st_gid U32: 0 // gid_t
+//   :let st_rdev U64: 0 // dev_t
+//   :let st_size ISize: 0 // off_t
+//   :let st_blksize ISize: 0 // blksize_t
+//   :let st_blocks ISize: 0 // blkcnt_t
+//   :let st_atim: ISize
+//   :let st_atim_nsec: ISize
+//   :let st_mtim: ISize
+//   :let st_mtim_nsec: ISize
+//   :let st_ctim: ISize
+//   :let st_ctim_nsec: ISize
+//   :let _reserved0 I64: 0
+
+:struct _FFI.MacOSX8664.StatX.Timestamp
+  :let tv_sec I64: 0
+  :let tv_nsec U32: 0
+  :let _pad0 I32: 0
+
+:struct _FFI.MacOSX8664.StatX
+  :let stx_mask U32: 0
+  :let stx_blksize U32: 0
+  :let stx_attributes U64: 0
+  :let stx_nlink U32: 0
+  :let stx_uid U32: 0
+  :let stx_gid U32: 0
+  :let stx_mode U16: 0
+  :let _pad0 U16: 0
+  :let stx_ino U64: 0
+  :let stx_size U64: 0
+  :let stx_blocks U64: 0
+  :let stx_attributes_mask U64: 0
+  :let stx_atime: _FFI.MacOSX8664.StatX.Timestamp.new
+  :let stx_btime: _FFI.MacOSX8664.StatX.Timestamp.new
+  :let stx_ctime: _FFI.MacOSX8664.StatX.Timestamp.new
+  :let stx_mtime: _FFI.MacOSX8664.StatX.Timestamp.new
+  :let stx_rdev_major U32: 0
+  :let stx_rdev_minor U32: 0
+  :let stx_dev_major U32: 0
+  :let stx_dev_minor U32: 0
+  :let _pad2_0 U64: 0
+  :let _pad2_1 U64: 0
+  :let _pad2_2 U64: 0
+  :let _pad2_3 U64: 0
+  :let _pad2_4 U64: 0
+  :let _pad2_5 U64: 0
+  :let _pad2_6 U64: 0
+  :let _pad2_7 U64: 0
+  :let _pad2_8 U64: 0
+  :let _pad2_9 U64: 0
+  :let _pad2_10 U64: 0
+  :let _pad2_11 U64: 0
+  :let _pad2_12 U64: 0
+  :let _pad2_13 U64: 0

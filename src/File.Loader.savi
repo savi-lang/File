@@ -1,0 +1,166 @@
+// TODO: Requiring a behavior here is overly restrictive - need to iron out
+// how to construct async callbacks in general - likely using fat pointers.
+:trait tag File.Loader.ResultActor
+  :: This will be called as a callback after trying to load a file, including
+  :: the path that was requested to be loaded, the result code, and content.
+  ::
+  :: If the attempt was successful, `result` will be `File.Result.Success`,
+  :: and the entire file's data will be in the `content` buffer.
+  ::
+  :: On error, `result` will indicate a specific error code, and the `content`
+  :: buffer will either be completely empty, or (less often) have an incomplete
+  :: portion of the file's data (whatever was loaded prior to the error).
+  :be result_of_load_from_file(
+    path File.Path.Readable
+    result File.Result
+    content Bytes'iso
+  )
+
+:: Load files from disk, loading each specified file entirely into memory.
+:actor File.Loader
+  :be load_from_file(
+    path File.Path.Readable
+    callback File.Loader.ResultActor
+  )
+    case (
+    | Platform.is_posix |
+      // If the path string contains a null byte, the POSIX `open` call below
+      // will stop reading the string at that byte, such that it wouldn't be
+      // using the full path string the user requested. In such a case, we
+      // should reject the path as invalid rather than open the wrong path.
+      if path.string.includes("\0") (
+        error = File.Result.PathInvalid
+        callback.result_of_load_from_file(path, error, Bytes.new_iso)
+        return
+      )
+
+      // Open the file.
+      fd = try (
+        @_posix_open!(path, callback)
+      |
+        return
+      )
+
+      // Get the file size to create an buffer of the right initial size, then
+      // read all of the file into the buffer, taking into account the
+      // edge case where the file has changed size since it was last measured
+      // by the earlier stat call.
+      //
+      // That is, measuring the size ahead of time should only be seen as
+      // an optimization that prevents re-allocations from a too-small buffer
+      // in the common case where the size has not changed since the stat call.
+      try (
+        initial_buffer_size = @_posix_fstat_get_size!(path, fd, callback)
+        buffer = Bytes.new(initial_buffer_size + 1)
+        while True (
+          break if @_posix_read!(path, fd, buffer, callback)
+        )
+
+        // Success!
+        result = File.Result.Success
+        callback.result_of_load_from_file(path, result, buffer.take_buffer)
+      )
+
+      // Close the file descriptor prior to exit (on success or failure).
+      //
+      // Note that we don't check the exit code here, because it seems like
+      // there's not much we can do in the case of failure.
+      _FFI.Posix.close(fd)
+    |
+      // TODO: Windows
+    )
+
+  :fun _posix_open!(
+    path File.Path.Readable
+    callback File.Loader.ResultActor
+  ) I32
+    fd = _FFI.Posix.open(path.string.cstring, _FFI.Posix.o_rdonly, 0)
+
+    if fd == -1 (
+      error = case _FFI.Posix.errno == (
+      | OSError.EACCES       | File.Result.AccessDenied
+      | OSError.EFBIG        | File.Result.FileIsTooLarge
+      | OSError.EINVAL       | File.Result.PathInvalid
+      | OSError.EISDIR       | File.Result.PathIsDirectory
+      | OSError.ELOOP        | File.Result.TooManySymbolicLinksFollowed
+      | OSError.EMFILE       | File.Result.TooManyFilesOpenInProcess
+      | OSError.ENAMETOOLONG | File.Result.PathTooLong
+      | OSError.ENFILE       | File.Result.TooManyFilesOpenInSystem
+      | OSError.ENOENT       | File.Result.PathNotFound
+      | OSError.ENODEV       | File.Result.FileIsNonOpenableDevice
+      | OSError.ENOMEM       | File.Result.MemoryBufferExhausted
+      | OSError.ENXIO        | File.Result.FileIsNonOpenableDevice
+      | OSError.EOVERFLOW    | File.Result.FileIsTooLarge
+      | OSError.EPERM        | File.Result.FileIsSealed
+      | OSError.EAGAIN       | File.Result.FileIsLockedPseudoTerminal // weird MacOS use of EAGAIN...
+      | OSError.EINTR        |
+        @load_from_file(path, callback) // try again
+        error! // jump out here to avoid calling the callback for failure
+      |
+        // If we didn't find a known error code, it's a bug in this library.
+        // This library should explicitly handle every possible error code.
+        File.Result.BugInLibrary
+      )
+      callback.result_of_load_from_file(path, error, Bytes.new_iso)
+      error!
+    )
+
+    fd
+
+  :fun _posix_fstat_get_size!(
+    path File.Path.Readable
+    fd I32
+    callback File.Loader.ResultActor
+  ) USize
+    try (
+      _FFI.Posix.fstat_get_size!(fd)
+    |
+      error = case _FFI.Posix.errno == (
+      | OSError.EACCES       | File.Result.AccessDenied
+      | OSError.ENOMEM       | File.Result.MemoryBufferExhausted
+      | OSError.EOVERFLOW    | File.Result.FileIsTooLarge
+      | OSError.EIO          | File.Result.LowLevelIOFailed
+      | OSError.EAFNOSUPPORT | File.Result.LowLevelCorruption // called EINTEGRITY on FreeBSD - need to eventually patch OSError in some way to include this
+      |
+        // If we didn't find a known error code, it's a bug in this library.
+        // This library should explicitly handle every possible error code.
+        File.Result.BugInLibrary
+      )
+      callback.result_of_load_from_file(path, error, Bytes.new_iso)
+      error!
+    )
+
+  :fun _posix_read!(
+    path File.Path.Readable
+    fd I32
+    buffer Bytes'ref
+    callback File.Loader.ResultActor
+  ) Bool
+    read_bytes = _FFI.Posix.read(
+      fd
+      buffer.cpointer.offset(buffer.size)
+      buffer.space - buffer.size
+    )
+
+    if read_bytes == -1 (
+      error = case _FFI.Posix.errno == (
+      | OSError.EIO     | File.Result.LowLevelIOFailed
+      | OSError.EISDIR  | File.Result.PathIsDirectory
+      | OSError.ENOBUFS | File.Result.MemoryBufferFailed
+      | OSError.ENOMEM  | File.Result.MemoryBufferExhausted
+      | OSError.ENXIO   | File.Result.FileIsNonReadableDevice
+      | OSError.EINTR   | return False // keep reading, trying again
+      |
+        // If we didn't find a known error code, it's a bug in this library.
+        // This library should explicitly handle every possible error code.
+        File.Result.BugInLibrary
+      )
+      callback.result_of_load_from_file(path, error, buffer.take_buffer)
+      error!
+    )
+
+    buffer.resize_possibly_including_uninitialized_memory(
+      buffer.size + read_bytes.usize
+    )
+
+    read_bytes == 0 // return True if we've finished reading the entire file

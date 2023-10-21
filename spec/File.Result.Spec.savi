@@ -1,0 +1,18 @@
+:class File.Result.Spec
+  :is Spec
+  :const describes: "File.Result"
+
+  :it "has a description for every enum member"
+    File.Result.each_enum_member -> (member |
+      assert: member.description != ""
+    )
+
+  :it "describes without using 2nd person language"
+    File.Result.each_enum_member -> (member |
+      assert: !member.description.includes("you")
+    )
+
+  :it "describes without any un-escaped newline characters in the text"
+    File.Result.each_enum_member -> (member |
+      assert: !member.description.includes("\n")
+    )
