@@ -2,10 +2,19 @@
   :is Spec
   :const describes: "File.Dumper"
 
+  // TODO: Generate a random temporary filename to avoid collisions
+  :fun tmp_path(name String)
+    File.Path.new(@env.root
+      if Platform.is_windows (
+        "c:/windows/temp/\(name)"
+      |
+        "/tmp/\(name)"
+      )
+    )
+
   :it "dumps the given chunks into a file at the given file"
     dumper = File.Dumper.new
-    // TODO: Generate a random temporary filename to avoid collisions
-    path = File.Path.new(@env.root, "/tmp/savi-file-dumper-test-1")
+    path = @tmp_path("savi-file-dumper-test-1")
 
     dumper.dump_to_file(path.write_only, [b"EXAMPLE"]
       _ExpectFileDump.for(@ctx, path, File.Result.Success, b"EXAMPLE")
@@ -21,7 +30,7 @@
 
   :it "rejects dumping a file which contains a null byte in its name"
     dumper = File.Dumper.new
-    path = File.Path.new(@env.root, "/tmp/\0my-file")
+    path = @tmp_path("my-\0file")
 
     dumper.dump_to_file(path, [b"EXAMPLE"]
       _ExpectFileDump.for(@ctx, path, File.Result.PathInvalid, b"")
@@ -54,6 +63,10 @@
     assert: path == @expected_path
     assert: result == @expected_result
     File.Loader.new.load_from_file(@expected_path, @)
+
+    if @expected_result == File.Result.Success (
+      assert: File.Info.for!(@expected_path).size == @expected_content.size
+    )
 
   :is File.Loader.ResultActor
   :be result_of_load_from_file(

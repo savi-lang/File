@@ -1,0 +1,22 @@
+:: Information about a file on the filesystem.
+::
+:: Note that this information was captured at a certain point in time, and
+:: thus may not be accurate if the file has been modified since then.
+:: So take special care to handle race conditions when using this information.
+:struct val File.Info
+  :: The path to the file.
+  :let path File.Path.Any
+
+  :: The size of the file, in bytes.
+  :let size USize
+
+  :new _new(@path, @size)
+
+  :: Retrieve current information about the given file path.
+  ::
+  :: Raises an error if the file does not exist or could not be accessed
+  :: (for any reason).
+  :fun non for!(path File.Path.Readable) File.Info
+    _Unsafe.stat_as_file_info!(path) -> (error |
+      // Silently ignore the specific kind of error - we won't show the caller.
+    )

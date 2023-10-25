@@ -2,9 +2,18 @@
   :is Spec
   :const describes: "File.Loader"
 
+  // TODO: Generate a random temporary filename to avoid collisions
+  :fun tmp_path(name String)
+    File.Path.new(@env.root
+      if Platform.is_windows (
+        "c:/windows/temp/\(name)"
+      |
+        "/tmp/\(name)"
+      )
+    )
+
   :it "loads the content of the given file"
-    // TODO: Generate a random temporary filename to avoid collisions
-    path = File.Path.new(@env.root, "/tmp/savi-file-loader-test-1")
+    path = @tmp_path("savi-file-loader-test-1")
 
     _FileDumpThenFileLoad.new(@ctx, path, b"EXAMPLE"
       _ExpectFileLoad.for(@ctx, path, File.Result.Success, b"EXAMPLE")
@@ -20,7 +29,7 @@
 
   :it "rejects loading a file which contains a null byte in its name"
     loader = File.Loader.new
-    path = File.Path.ReadOnly.new(@env.root, "/tmp/\0my-file")
+    path = @tmp_path("my-\0file")
 
     loader.load_from_file(path
       _ExpectFileLoad.for(@ctx, path, File.Result.PathInvalid, b"")
