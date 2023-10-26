@@ -2,6 +2,25 @@
   :is Spec
   :const describes: "File.Info"
 
+  :it "returns a information about a file"
+    // TODO: make this work without assuming a particular working directory.
+    path = File.Path.new(@env.root, "spec/fixtures/FOO_BAR_BAZ.txt")
+    assert no_error: (info = File.Info.for!(path)
+      assert: info.path == path
+      assert: info.size == 11
+
+      earlier = Time.utc(2020, 1, 1) // early enough to precede the timestamps
+      later   = Time.utc(2200, 1, 1) // late enough to follow the timestamps
+      assert: info.last_access_time > earlier
+      assert: info.last_access_time < later
+      assert: info.last_modify_time > earlier
+      assert: info.last_modify_time < later
+      assert: info.last_change_time > earlier
+      assert: info.last_change_time < later
+      assert: try (info.birth_time! > earlier | True)
+      assert: try (info.birth_time! < later   | True)
+    )
+
   :it "raises an error for a path that doesn't exist"
     path = File.Path.new(@env.root, "/bogus/path/that/never/exists")
     assert error: File.Info.for!(path)
