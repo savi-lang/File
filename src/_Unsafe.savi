@@ -1,0 +1,325 @@
+:: These are the low-level file operations that are used by the higher-level
+:: file actors in this library. They are slightly higher-level than raw FFI,
+:: but they still do not have safety guardrails of their own, and they rely
+:: on the calling code to call carefully, without invalid arguments.
+::
+:: These low-level operations also do not enforce capability security, and
+:: most of them do not take file path capability object as an argument,
+:: so they rely on the caller to have already enforced that requirement.
+::
+:: The partial methods here follow the pattern of yielding an error result code
+:: and then raising an error, so that the caller can follow a pattern of
+:: storing or sending the error result code to a callback, and then let the
+:: raised error unwind the stack.
+::
+:: These methods must follow the contract of never raising an error unless they
+:: yield an error result code first, so the caller can rely on this pattern.
+:module _Unsafe
+  :: Check that the given path string is valid for use with FFI.
+  :fun check_path!(path_string String)
+    // If the path string contains a null byte, C APIs that don't take a length
+    // will stop reading the string at that byte, such that it wouldn't be
+    // using the full path string the user requested. In such a case, we
+    // should reject the path as invalid rather than open the wrong path.
+    if path_string.includes("\0") (
+      yield File.Result.PathInvalid
+      error!
+    )
+
+  :: Open a file at the given path for reading, if it exists.
+  ::
+  :: On success, returns a valid file descriptor ready for reading.
+  :: Otherwise, an error result code is yielded, then an error is raised.
+  :fun open_read!(path File.Path.Readable)
+    fd = _FFI.open(path.string.cstring, _FFI.o_rdonly, 0)
+    if fd == -1 (
+      case _FFI.errno == (
+      | OSError.EACCES       | yield File.Result.AccessDenied
+      | OSError.EFBIG        | yield File.Result.FileIsTooLarge
+      | OSError.EINVAL       | yield File.Result.PathInvalid
+      | OSError.EISDIR       | yield File.Result.PathIsDirectory
+      | OSError.ELOOP        | yield File.Result.TooManySymbolicLinksFollowed
+      | OSError.EMFILE       | yield File.Result.TooManyFilesOpenInProcess
+      | OSError.ENAMETOOLONG | yield File.Result.PathTooLong
+      | OSError.ENFILE       | yield File.Result.TooManyFilesOpenInSystem
+      | OSError.ENOENT       | yield File.Result.PathNotFound
+      | OSError.ENODEV       | yield File.Result.FileIsNonOpenableDevice
+      | OSError.ENOMEM       | yield File.Result.MemoryBufferExhausted
+      | OSError.ENXIO        | yield File.Result.FileIsNonOpenableDevice
+      | OSError.EOVERFLOW    | yield File.Result.FileIsTooLarge
+      | OSError.EPERM        | yield File.Result.FileIsSealed
+      | OSError.EAGAIN       | yield File.Result.FileIsLockedPseudoTerminal // weird MacOS use of EAGAIN...
+      | OSError.EINTR        | yield File.Result.NeedsRetry
+      |                        yield File.Result.BugInLibrary
+      )
+      error!
+    )
+    fd
+
+  :: Open a file at the given path for writing, creating it if needed.
+  ::
+  :: On success, returns a valid file descriptor ready for writing.
+  :: Otherwise, the file descriptor will be invalid an error result is yielded.
+  :fun open_write_create!(path File.Path.Writable)
+    default_mode = case (
+    | Platform.is_posix   | 0b111111101 // rwxrwxr-x
+    | Platform.is_windows | 0x0080 // _S_IWRITE
+    |                       0
+    )
+    // TODO: implement a way to let the caller affect the mode/permissions,
+    // after deciding a few key questions:
+    //   - how will we handle stark differences between POSIX and Windows?
+    //   - should we apply these permissions only if the file is created,
+    //     or also if already existed and we are just overwriting it?
+
+    fd = _FFI.open(
+      path.string.cstring
+      _FFI.o_wronly
+        .bit_or(_FFI.o_creat)
+        .bit_or(_FFI.o_trunc)
+        .bit_or(_FFI.o_binary) // relevant to windows only
+      default_mode
+    )
+    if fd == -1 (
+      case _FFI.errno == (
+      | OSError.EACCES       | yield File.Result.AccessDenied
+      | OSError.EDQUOT       | yield File.Result.DiskQuotaExhausted
+      | OSError.EFBIG        | yield File.Result.FileIsTooLarge
+      | OSError.EINVAL       | yield File.Result.PathInvalid
+      | OSError.EISDIR       | yield File.Result.PathIsDirectory
+      | OSError.ELOOP        | yield File.Result.TooManySymbolicLinksFollowed
+      | OSError.EMFILE       | yield File.Result.TooManyFilesOpenInProcess
+      | OSError.ENAMETOOLONG | yield File.Result.PathTooLong
+      | OSError.ENFILE       | yield File.Result.TooManyFilesOpenInSystem
+      | OSError.ENODEV       | yield File.Result.FileIsNonOpenableDevice
+      | OSError.ENOMEM       | yield File.Result.MemoryBufferExhausted
+      | OSError.ENOSPC       | yield File.Result.DiskSpaceExhausted
+      | OSError.ENOTDIR      | yield File.Result.PathPrefixIsNotDirectory
+      | OSError.ENXIO        | yield File.Result.FileIsNonOpenableDevice
+      | OSError.EOVERFLOW    | yield File.Result.FileIsTooLarge
+      | OSError.EPERM        | yield File.Result.FileIsSealed
+      | OSError.EROFS        | yield File.Result.FileSystemIsReadOnly
+      | OSError.ETXTBSY      | yield File.Result.FileIsBusy
+      | OSError.EAGAIN       | yield File.Result.FileIsLockedPseudoTerminal // weird MacOS use of EAGAIN...
+      | OSError.ENOENT       | yield File.Result.PathPrefixNotFound
+      | OSError.EINTR        | yield File.Result.NeedsRetry
+      |                        yield File.Result.BugInLibrary
+      )
+      error!
+    )
+    fd
+
+  :fun stat_as_file_info!(path File.Path.Any) File.Info
+    try (
+      _FFI.stat_as_file_info!(path)
+    |
+      case _FFI.errno == (
+      | OSError.success      | yield File.Result.BugInLibrary // (unsupported platform in the above function)
+      | OSError.EACCES       | yield File.Result.AccessDenied
+      | OSError.ELOOP        | yield File.Result.TooManySymbolicLinksFollowed
+      | OSError.ENAMETOOLONG | yield File.Result.PathTooLong
+      | OSError.ENOENT       | yield File.Result.PathNotFound
+      | OSError.ENOTDIR      | yield File.Result.PathNotFound
+      | OSError.ENOMEM       | yield File.Result.MemoryBufferExhausted
+      | OSError.EOVERFLOW    | yield File.Result.FileIsTooLarge
+      | OSError.EIO          | yield File.Result.LowLevelIOFailed
+      | OSError.EAFNOSUPPORT | yield File.Result.LowLevelCorruption // TODO: called EINTEGRITY on FreeBSD - need to eventually patch OSError in some way to include this
+      |                        yield File.Result.BugInLibrary
+      )
+      error!
+    )
+
+  :fun fstat_as_file_info!(path File.Path.Any, fd I32) File.Info
+    try (
+      _FFI.fstat_as_file_info!(path, fd)
+    |
+      case _FFI.errno == (
+      | OSError.success      | yield File.Result.BugInLibrary // (unsupported platform in the above function)
+      | OSError.EACCES       | yield File.Result.AccessDenied
+      | OSError.ENOMEM       | yield File.Result.MemoryBufferExhausted
+      | OSError.EOVERFLOW    | yield File.Result.FileIsTooLarge
+      | OSError.EIO          | yield File.Result.LowLevelIOFailed
+      | OSError.EAFNOSUPPORT | yield File.Result.LowLevelCorruption // TODO: called EINTEGRITY on FreeBSD - need to eventually patch OSError in some way to include this
+      |                        yield File.Result.BugInLibrary
+      )
+      error!
+    )
+
+  :fun read!(fd I32, buffer Bytes'ref) Bool
+    space = buffer.space - buffer.size
+    if space == 0 (
+      buffer.reserve(buffer.space + 1) // reserve the next exponential size up
+      space = buffer.space - buffer.size
+    )
+
+    read_bytes = _FFI.read(fd, buffer.cpointer.offset(buffer.size), space)
+    if read_bytes == -1 (
+      case _FFI.errno == (
+      | OSError.EIO     | yield File.Result.LowLevelIOFailed
+      | OSError.EISDIR  | yield File.Result.PathIsDirectory
+      | OSError.ENOBUFS | yield File.Result.MemoryBufferFailed
+      | OSError.ENOMEM  | yield File.Result.MemoryBufferExhausted
+      | OSError.ENXIO   | yield File.Result.FileIsNonReadableDevice
+      | OSError.EINTR   | return False // keep reading, trying again
+      |                   yield File.Result.BugInLibrary
+      )
+      error!
+    )
+    buffer.resize_possibly_including_uninitialized_memory(
+      buffer.size + read_bytes.usize
+    )
+    read_bytes == 0 // return True if we've finished reading the entire file
+
+  :fun read_all!(path File.Path.Readable, fd I32, buffer Bytes'ref) None
+    // Get the file size to create an buffer of the right initial size, then
+    // read all of the file into the buffer, taking into account the
+    // edge case where the file has changed size since it was last measured
+    // by the earlier stat call.
+    //
+    // That is, measuring the size ahead of time should only be seen as
+    // an optimization that prevents re-allocations from a too-small buffer
+    // in the common case where the size has not changed since the stat call.
+    initial_stat = @fstat_as_file_info!(path, fd) -> (error | yield error)
+    buffer.reserve(initial_stat.size + 1)
+    did_finish = False
+    while !did_finish (
+      did_finish = @read!(fd, buffer) -> (error |
+        yield error
+      )
+    )
+
+  :fun writev_loop!(fd I32, incoming_chunks Array(Bytes)'val) None
+    // Convert to a C array of POSIX iovec structs.
+    bytes_total USize = 0
+    chunks = Array(_WriteChunk).new(incoming_chunks.size)
+    incoming_chunks.each -> (chunk |
+      bytes_total += chunk.size
+      if chunk.size > 0 (
+        chunks << _WriteChunk.from_cpointer(chunk.cpointer, chunk.size)
+      )
+    )
+
+    // If there are no bytes to write, we're done.
+    return if bytes_total == 0
+
+    // Loop until everything is written.
+    while bytes_total > 0 (
+      bytes_total = @_writev_inner!(fd, chunks, bytes_total) -> (error |
+        yield error
+      )
+    )
+
+  :fun _writev_inner!(
+    fd I32
+    chunks Array(_WriteChunk)
+    bytes_total USize
+  ) USize
+    bytes_written_isize = case (
+    | Platform.is_posix |
+      _FFI.writev_posix(
+        fd
+        chunks.cpointer
+        try (chunks.size.i32! | I32.max_value)
+      )
+    |
+      try (
+        first_chunk = chunks.first!
+        _FFI.write_windows(
+          fd
+          first_chunk.cpointer
+          try (first_chunk.size.u32! | U32.max_value)
+        ).isize
+      |
+        0
+      )
+    )
+    if bytes_written_isize == -1 (
+      case _FFI.errno == (
+      | OSError.EDQUOT | yield File.Result.DiskQuotaExhausted
+      | OSError.EFBIG  | yield File.Result.FileIsTooLarge
+      | OSError.EINVAL | yield File.Result.PathInvalid
+      | OSError.EIO    | yield File.Result.LowLevelIOFailed
+      | OSError.ENOSPC | yield File.Result.DiskSpaceExhausted
+      | OSError.EPERM  | yield File.Result.FileIsSealed
+      | OSError.EPIPE  | yield File.Result.PipeReaderHasClosed
+      | OSError.EINTR  | return bytes_total // needs retry
+      |                  yield File.Result.BugInLibrary
+      )
+      error!
+    )
+    bytes_written = bytes_written_isize.usize
+
+    // If all chunks were written, we're done.
+    return 0 if bytes_total <= bytes_written
+
+    // Otherwise, we need to figure out how much of the original chunks
+    // still need to be written - we'll pass them into the next attempt.
+    bytes_total -= bytes_written
+    chunks_trim_start USize = 0
+    first_chunk_trim_start USize = 0
+    chunks.each -> (chunk |
+      if bytes_written < chunk.size (
+        first_chunk_trim_start = bytes_written
+        break
+      )
+
+      chunks_trim_start += 1
+      bytes_written -= chunk.size
+      break if bytes_written.is_zero
+    )
+
+    // Trim the chunks / parts of chunks that have already been written.
+    chunks.trim_in_place(chunks_trim_start)
+    if first_chunk_trim_start != 0 (
+      try (
+        chunks.first! = chunks.first!.trim_left(first_chunk_trim_start)
+      )
+    )
+
+    // There are still this many more bytes to write.
+    bytes_total
+
+  :fun fsync!(fd I32)
+    try_again = True
+    while try_again (
+      try_again = False
+
+      failed = _FFI.fsync(fd) == -1
+
+      if failed (
+        case _FFI.errno == (
+        | OSError.EIO    | yield File.Result.LowLevelIOFailed
+        | OSError.ENOSPC | yield File.Result.DiskSpaceExhausted
+        | OSError.EDQUOT | yield File.Result.DiskQuotaExhausted
+        | OSError.EROFS  | failed = False // can't fsync a pipe or FIFO - that's okay
+        | OSError.EINVAL | failed = False // can't fsync a pipe or FIFO - that's okay
+        | OSError.EAGAIN | failed = False, try_again = True
+        | OSError.EINTR  | failed = False, try_again = True
+        |                  yield File.Result.BugInLibrary
+        )
+        error! if failed
+      )
+    )
+    True
+
+  :fun close!(fd I32) None
+    failed = _FFI.close(fd) == -1
+    if failed (
+      case _FFI.errno == (
+      | OSError.EIO    | yield File.Result.LowLevelIOFailed
+      | OSError.ENOSPC | yield File.Result.DiskSpaceExhausted
+      | OSError.EDQUOT | yield File.Result.DiskQuotaExhausted
+      | OSError.EINTR  |
+        // POSIX recommends that we don't try again - the file descriptor
+        // on Linux is guaranteed to be freed even if interrupted.
+        // If we tried again to free it, we might accidentally free
+        // a newly allocated file descriptor of the same number.
+        // However, the POSIX spec does leave ambiguity for implementations
+        // to not free the file descriptor when interrupted. Sad.
+        return
+      |
+        yield File.Result.BugInLibrary
+      )
+
+      error!
+    )

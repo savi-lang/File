@@ -1,0 +1,7 @@
+:class File.Info.Spec
+  :is Spec
+  :const describes: "File.Info"
+
+  :it "raises an error for a path that doesn't exist"
+    path = File.Path.new(@env.root, "/bogus/path/that/never/exists")
+    assert error: File.Info.for!(path)

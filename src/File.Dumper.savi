@@ -19,224 +19,49 @@
 :actor File.Dumper
   :be dump_to_file(
     path File.Path.Writable
-    incoming_chunks Array(Bytes)'val
+    chunks Array(Bytes)'val
     callback File.Dumper.ResultActor = File.Dumper.ResultActor.None
   )
-    case (
-    | Platform.is_posix |
-      // If the path string contains a null byte, the POSIX `open` call below
-      // will stop reading the string at that byte, such that it wouldn't be
-      // using the full path string the user requested. In such a case, we
-      // should reject the path as invalid rather than open the wrong path.
-      if path.string.includes("\0") (
-        callback.result_of_dump_to_file(path, File.Result.PathInvalid)
-        return
+    try (
+      _Unsafe.check_path!(path.string) -> (error |
+        callback.result_of_dump_to_file(path, error)
       )
 
-      // Choose file permissions to create with, if the file gets created.
-      default_mode = 0b111111101 // rwxrwxr-x
-      // TODO: implement a way to let the caller affect the permissions, after
-      // deciding a few key questions:
-      //   - how will we handle stark differences between POSIX and Windows?
-      //   - should we apply these permissions only if the file is created,
-      //     or also if already existed and we are just overwriting it?
-
-      // Open the file for writing, creating it if needed.
-      fd = _FFI.Posix.open(
-        path.string.cstring
-        _FFI.Posix.o_wronly
-          .bit_or(_FFI.Posix.o_creat)
-          .bit_or(_FFI.Posix.o_trunc)
-        default_mode
-      )
-      if fd == -1 (
-        error = case _FFI.Posix.errno == (
-        | OSError.EACCES       | File.Result.AccessDenied
-        | OSError.EDQUOT       | File.Result.DiskQuotaExhausted
-        | OSError.EFBIG        | File.Result.FileIsTooLarge
-        | OSError.EINVAL       | File.Result.PathInvalid
-        | OSError.EISDIR       | File.Result.PathIsDirectory
-        | OSError.ELOOP        | File.Result.TooManySymbolicLinksFollowed
-        | OSError.EMFILE       | File.Result.TooManyFilesOpenInProcess
-        | OSError.ENAMETOOLONG | File.Result.PathTooLong
-        | OSError.ENFILE       | File.Result.TooManyFilesOpenInSystem
-        | OSError.ENODEV       | File.Result.FileIsNonOpenableDevice
-        | OSError.ENOMEM       | File.Result.MemoryBufferExhausted
-        | OSError.ENOSPC       | File.Result.DiskSpaceExhausted
-        | OSError.ENOTDIR      | File.Result.PathPrefixIsNotDirectory
-        | OSError.ENXIO        | File.Result.FileIsNonOpenableDevice
-        | OSError.EOVERFLOW    | File.Result.FileIsTooLarge
-        | OSError.EPERM        | File.Result.FileIsSealed
-        | OSError.EROFS        | File.Result.FileSystemIsReadOnly
-        | OSError.ETXTBSY      | File.Result.FileIsBusy
-        | OSError.EAGAIN       | File.Result.FileIsLockedPseudoTerminal // weird MacOS use of EAGAIN...
-        | OSError.ENOENT       |
-          // TODO: create the prefix directories
-          File.Result.PathPrefixNotFound
-
-        | OSError.EINTR        |
-          @dump_to_file(path, incoming_chunks, callback) // try again
+      fd = _Unsafe.open_write_create!(path) -> (error |
+        case error == (
+        | File.Result.PathPrefixNotFound |
+          // TODO: Create the prefix directories instead of being asinine.
+          None
+        | File.Result.AccessDenied |
+          if Platform.is_windows (
+            // TODO: Check if the path refers to a directory. If it is, switch
+            // the error to File.Result.PathIsDirectory, which is more helpful.
+          )
+        | File.Result.NeedsRetry |
+          @dump_to_file(path, chunks, callback) // try again
           return
-        |
-          // If we didn't find a known error code, it's a bug in this library.
-          // This library should explicitly handle every possible error code.
-          File.Result.BugInLibrary
         )
+
         callback.result_of_dump_to_file(path, error)
-        return
       )
 
-      // Convert to a C array of POSIX iovec structs.
-      bytes_total USize = 0
-      chunks = Array(_WriteChunk).new_iso(incoming_chunks.size)
-      incoming_chunks.each -> (chunk |
-        bytes_total += chunk.size
-        if chunk.size > 0 (
-          chunks << _WriteChunk.from_cpointer(chunk.cpointer, chunk.size)
-        )
-      )
-
-      // If there are no bytes to write, we're done.
-      if bytes_total == 0 (
-        @_posix_close(path, fd, callback)
-        return
-      )
-
-      // Write the chunks.
-      @_posix_writev(path, fd, --chunks, bytes_total, callback)
-    |
-      // TODO: Windows
-    )
-
-  :be _posix_writev(
-    path File.Path.Writable
-    fd I32
-    chunks Array(_WriteChunk)'iso
-    bytes_total USize
-    callback File.Dumper.ResultActor
-  )
-    if !Platform.is_posix (
-      callback.result_of_dump_to_file(path, File.Result.BugInLibrary)
-      return
-    )
-
-    // Write the chunks to the file.
-    bytes_written_isize = _FFI.Posix.writev(
-      fd
-      chunks.cpointer
-      chunks.size.i32
-    )
-    if bytes_written_isize == -1 (
-      error = case _FFI.Posix.errno == (
-      | OSError.EDQUOT | File.Result.DiskQuotaExhausted
-      | OSError.EFBIG  | File.Result.FileIsTooLarge
-      | OSError.EINVAL | File.Result.PathInvalid
-      | OSError.EIO    | File.Result.LowLevelIOFailed
-      | OSError.ENOSPC | File.Result.DiskSpaceExhausted
-      | OSError.EPERM  | File.Result.FileIsSealed
-      | OSError.EPIPE  | File.Result.PipeReaderHasClosed
-      | OSError.EINTR  |
-        @_posix_writev(path, fd, --chunks, bytes_total, callback) // try again
-        return
-      |
-        // If we didn't find a known error code, it's a bug in this library.
-        // This library should explicitly handle every possible error code.
-        File.Result.BugInLibrary
-      )
-    )
-    bytes_written = bytes_written_isize.usize
-
-    // If all chunks were written, we're done.
-    if bytes_total <= bytes_written (
-      @_posix_fsync_and_close(path, fd, callback)
-      return
-    )
-
-    // Otherwise, we need to figure out how much of the original chunks
-    // still need to be written - we'll pass them into the next attempt.
-    bytes_total -= bytes_written
-    chunks_trim_start USize = 0
-    first_chunk_trim_start USize = 0
-    chunks.each -> (chunk |
-      if bytes_written < chunk.size (
-        first_chunk_trim_start = bytes_written
-        break
-      )
-
-      chunks_trim_start += 1
-      bytes_written -= chunk.size
-      break if bytes_written.is_zero
-    )
-
-    // Trim the chunks / parts of chunks that have already been written.
-    chunks.trim_in_place(chunks_trim_start)
-    if first_chunk_trim_start != 0 (
       try (
-        chunks.first! = chunks.first!.trim_left(first_chunk_trim_start)
-      )
-    )
-
-    // Write the rest of the chunks.
-    @_posix_writev(path, fd, --chunks, bytes_total, callback)
-
-  :be _posix_fsync_and_close(
-    path File.Path.Writable
-    fd I32
-    callback File.Dumper.ResultActor
-  )
-    failed = _FFI.Posix.fsync(fd) == -1
-    if failed (
-      error = case _FFI.Posix.errno == (
-      | OSError.EIO    | File.Result.LowLevelIOFailed
-      | OSError.ENOSPC | File.Result.DiskSpaceExhausted
-      | OSError.EDQUOT | File.Result.DiskQuotaExhausted
-      | OSError.EROFS  | failed = False, File.Result.Success // can't fsync a pipe or FIFO - that's okay
-      | OSError.EINVAL | failed = False, File.Result.Success // can't fsync a pipe or FIFO - that's okay
-      | OSError.EAGAIN |
-        @_posix_fsync_and_close(path, fd, callback) // try again
-        return
-      | OSError.EINTR  |
-        @_posix_fsync_and_close(path, fd, callback) // try again
-        return
+        _Unsafe.writev_loop!(fd, chunks) -> (error |
+          callback.result_of_dump_to_file(path, error)
+        )
+        _Unsafe.fsync!(fd) -> (error |
+          callback.result_of_dump_to_file(path, error)
+        )
+        _Unsafe.close!(fd) -> (error |
+          callback.result_of_dump_to_file(path, error)
+        )
+        callback.result_of_dump_to_file(path, File.Result.Success)
       |
-        // If we didn't find a known error code, it's a bug in this library.
-        // This library should explicitly handle every possible error code.
-        File.Result.BugInLibrary
+        // If any of the above steps failed, just close the file descriptor.
+        _Unsafe.close!(fd) -> (error |
+          // This is the failure path - we already called a callback with an
+          // error above, so we don't want to forward an additional error here,
+          // even if the close step failed with an error.
+        )
       )
-
-      if failed (
-        callback.result_of_dump_to_file(path, error)
-        return
-      )
-    )
-
-    callback.result_of_dump_to_file(path, File.Result.Success)
-
-  :be _posix_close(
-    path File.Path.Writable
-    fd I32
-    callback File.Dumper.ResultActor
-  )
-    failed = _FFI.Posix.close(fd) == -1
-    if failed (
-      error = case _FFI.Posix.errno == (
-      | OSError.EIO    | File.Result.LowLevelIOFailed
-      | OSError.ENOSPC | File.Result.DiskSpaceExhausted
-      | OSError.EDQUOT | File.Result.DiskQuotaExhausted
-      | OSError.EINTR  |
-        // POSIX recommends that we don't try again - the file descriptor
-        // on Linux is guaranteed to be freed even if interrupted.
-        // If we tried again to free it, we might accidentally free
-        // a newly allocated file descriptor of the same number.
-        // However, the POSIX spec does leave ambiguity for implementations
-        // to not free the file descriptor when interrupted. Sad.
-        return
-      |
-        // If we didn't find a known error code, it's a bug in this library.
-        // This library should explicitly handle every possible error code.
-        File.Result.BugInLibrary
-      )
-
-      callback.result_of_dump_to_file(path, error)
-      return
     )

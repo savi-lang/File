@@ -6,10 +6,9 @@
 
   // This should "never" be seen in the wild. If it is, it's a bug!
   :member BugInLibrary 1
-  // TODO:
-  // :with description
-  //   "An error occurred that the File library didn't consider to be possible. \
-  //   This is definitely a bug. Please file an issue ticket for the library."
+  // This should never be seen outside the library code - the library should
+  // always catch this and retry the operation rather than surfacing the error.
+  :member NeedsRetry 2
 
   ///
   // Some current condition of the file or file system prevents the operation.
@@ -62,6 +61,10 @@
 
     | File.Result.BugInLibrary |
       "An error occurred that the File library didn't consider to be possible. \
+      This is definitely a bug. Please file an issue ticket for the library."
+
+    | File.Result.NeedsRetry |
+      "An error occurred which the File library failed to retry. \
       This is definitely a bug. Please file an issue ticket for the library."
 
     | File.Result.AccessDenied |
