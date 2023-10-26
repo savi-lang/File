@@ -71,32 +71,98 @@
       linux_x8664 = _FFI.LinuxX8664.Stat.new
       result = @stat_linux_x8664(path.string.cstring, stack_address_of_variable linux_x8664)
       error! if result == -1
-      File.Info._new(path, linux_x8664.st_size.usize)
+      File.Info._new(
+        path
+        linux_x8664.st_size.usize
+        linux_x8664.st_atim.u64
+        linux_x8664.st_atim_nsec.u32
+        linux_x8664.st_mtim.u64
+        linux_x8664.st_mtim_nsec.u32
+        linux_x8664.st_ctim.u64
+        linux_x8664.st_ctim_nsec.u32
+        0 // linux_x8664.st_btim.u64
+        0 // linux_x8664.st_btim_nsec.u32
+      )
     | Platform.is_linux && Platform.is_64bit && Platform.is_arm |
       linux_arm64 = _FFI.LinuxArm64.Stat.new
       result = @stat_linux_arm64(path.string.cstring, stack_address_of_variable linux_arm64)
       error! if result == -1
-      File.Info._new(path, linux_arm64.st_size.usize)
+      File.Info._new(
+        path
+        linux_arm64.st_size.usize
+        linux_arm64.st_atim.u64
+        linux_arm64.st_atim_nsec.u32
+        linux_arm64.st_mtim.u64
+        linux_arm64.st_mtim_nsec.u32
+        linux_arm64.st_ctim.u64
+        linux_arm64.st_ctim_nsec.u32
+        0 // linux_arm64.st_btim.u64
+        0 // linux_arm64.st_btim_nsec.u32
+      )
     | Platform.is_linux && Platform.is_32bit && Platform.is_arm |
       linux_arm32 = _FFI.LinuxArm32.Stat.new
       result = @stat_linux_arm32(path.string.cstring, stack_address_of_variable linux_arm32)
       error! if result == -1
-      File.Info._new(path, linux_arm32.st_size.usize)
+      File.Info._new(
+        path
+        linux_arm32.st_size.usize
+        linux_arm32.st_atim.u64
+        linux_arm32.st_atim_nsec.u32
+        linux_arm32.st_mtim.u64
+        linux_arm32.st_mtim_nsec.u32
+        linux_arm32.st_ctim.u64
+        linux_arm32.st_ctim_nsec.u32
+        0 // linux_arm32.st_btim.u64
+        0 // linux_arm32.st_btim_nsec.u32
+      )
     | Platform.is_bsd |
       freebsd = _FFI.FreeBSD.Stat.new
       result = @stat_freebsd(path.string.cstring, stack_address_of_variable freebsd)
       error! if result == -1
-      File.Info._new(path, freebsd.st_size.usize)
+      File.Info._new(
+        path
+        freebsd.st_size.usize
+        freebsd.st_atim.u64
+        freebsd.st_atim_nsec.u32
+        freebsd.st_mtim.u64
+        freebsd.st_mtim_nsec.u32
+        freebsd.st_ctim.u64
+        freebsd.st_ctim_nsec.u32
+        freebsd.st_btim.u64
+        freebsd.st_btim_nsec.u32
+      )
     | Platform.is_macos |
       macos = _FFI.MacOS.Stat64.new
       result = @stat64_macos(path.string.cstring, stack_address_of_variable macos)
       error! if result == -1
-      File.Info._new(path, macos.st_size.usize)
+      File.Info._new(
+        path
+        macos.st_size.usize
+        macos.st_atim.u64
+        macos.st_atim_nsec.u32
+        macos.st_mtim.u64
+        macos.st_mtim_nsec.u32
+        macos.st_ctim.u64
+        macos.st_ctim_nsec.u32
+        macos.st_btim.u64
+        macos.st_btim_nsec.u32
+      )
     | Platform.is_windows |
       windows = _FFI.Windows.Stat64.new
       result = @stat64_windows(path.string.cstring, stack_address_of_variable windows)
       error! if result == -1
-      File.Info._new(path, windows.st_size.usize)
+      File.Info._new(
+        path
+        windows.st_size.usize
+        windows.st_atim.u64
+        0 // windows.st_atim_nsec.u32
+        windows.st_mtim.u64
+        0 // windows.st_mtim_nsec.u32
+        windows.st_ctim.u64
+        0 // windows.st_ctim_nsec.u32
+        0 // windows.st_btim.u64
+        0 // windows.st_btim_nsec.u32
+      )
     |
       @clear_errno
       error!
@@ -120,32 +186,98 @@
       linux_x8664 = _FFI.LinuxX8664.Stat.new
       result = @fstat_linux_x8664(fd, stack_address_of_variable linux_x8664)
       error! if result == -1
-      File.Info._new(path, linux_x8664.st_size.usize)
+      File.Info._new(
+        path
+        linux_x8664.st_size.usize
+        linux_x8664.st_atim.u64
+        linux_x8664.st_atim_nsec.u32
+        linux_x8664.st_mtim.u64
+        linux_x8664.st_mtim_nsec.u32
+        linux_x8664.st_ctim.u64
+        linux_x8664.st_ctim_nsec.u32
+        0 // linux_x8664.st_btim.u64
+        0 // linux_x8664.st_btim_nsec.u32
+      )
     | Platform.is_linux && Platform.is_64bit && Platform.is_arm |
       linux_arm64 = _FFI.LinuxArm64.Stat.new
       result = @fstat_linux_arm64(fd, stack_address_of_variable linux_arm64)
       error! if result == -1
-      File.Info._new(path, linux_arm64.st_size.usize)
+      File.Info._new(
+        path
+        linux_arm64.st_size.usize
+        linux_arm64.st_atim.u64
+        linux_arm64.st_atim_nsec.u32
+        linux_arm64.st_mtim.u64
+        linux_arm64.st_mtim_nsec.u32
+        linux_arm64.st_ctim.u64
+        linux_arm64.st_ctim_nsec.u32
+        0 // linux_arm64.st_btim.u64
+        0 // linux_arm64.st_btim_nsec.u32
+      )
     | Platform.is_linux && Platform.is_32bit && Platform.is_arm |
       linux_arm32 = _FFI.LinuxArm32.Stat.new
       result = @fstat_linux_arm32(fd, stack_address_of_variable linux_arm32)
       error! if result == -1
-      File.Info._new(path, linux_arm32.st_size.usize)
+      File.Info._new(
+        path
+        linux_arm32.st_size.usize
+        linux_arm32.st_atim.u64
+        linux_arm32.st_atim_nsec.u32
+        linux_arm32.st_mtim.u64
+        linux_arm32.st_mtim_nsec.u32
+        linux_arm32.st_ctim.u64
+        linux_arm32.st_ctim_nsec.u32
+        0 // linux_arm32.st_btim.u64
+        0 // linux_arm32.st_btim_nsec.u32
+      )
     | Platform.is_bsd |
       freebsd = _FFI.FreeBSD.Stat.new
       result = @fstat_freebsd(fd, stack_address_of_variable freebsd)
       error! if result == -1
-      File.Info._new(path, freebsd.st_size.usize)
+      File.Info._new(
+        path
+        freebsd.st_size.usize
+        freebsd.st_atim.u64
+        freebsd.st_atim_nsec.u32
+        freebsd.st_mtim.u64
+        freebsd.st_mtim_nsec.u32
+        freebsd.st_ctim.u64
+        freebsd.st_ctim_nsec.u32
+        freebsd.st_btim.u64
+        freebsd.st_btim_nsec.u32
+      )
     | Platform.is_macos |
       macos = _FFI.MacOS.Stat64.new
       result = @fstat64_macos(fd, stack_address_of_variable macos)
       error! if result == -1
-      File.Info._new(path, macos.st_size.usize)
+      File.Info._new(
+        path
+        macos.st_size.usize
+        macos.st_atim.u64
+        macos.st_atim_nsec.u32
+        macos.st_mtim.u64
+        macos.st_mtim_nsec.u32
+        macos.st_ctim.u64
+        macos.st_ctim_nsec.u32
+        macos.st_btim.u64
+        macos.st_btim_nsec.u32
+      )
     | Platform.is_windows |
       windows = _FFI.Windows.Stat64.new
       result = @fstat64_windows(fd, stack_address_of_variable windows)
       error! if result == -1
-      File.Info._new(path, windows.st_size.usize)
+      File.Info._new(
+        path
+        windows.st_size.usize
+        windows.st_atim.u64
+        0 // windows.st_atim_nsec.u32
+        windows.st_mtim.u64
+        0 // windows.st_mtim_nsec.u32
+        windows.st_ctim.u64
+        0 // windows.st_ctim_nsec.u32
+        0 // windows.st_btim.u64
+        0 // windows.st_btim_nsec.u32
+      )
     |
       @clear_errno
       error!
@@ -198,12 +330,12 @@
   :let st_blksize ISize: 0 // blksize_t
   :let _pad1 I32: 0
   :let st_blocks I64: 0 // blkcnt_t
-  :let st_atim: I64
-  :let st_atim_nsec: I64
-  :let st_mtim: I64
-  :let st_mtim_nsec: I64
-  :let st_ctim: I64
-  :let st_ctim_nsec: I64
+  :let st_atim I64: 0
+  :let st_atim_nsec I64: 0
+  :let st_mtim I64: 0
+  :let st_mtim_nsec I64: 0
+  :let st_ctim I64: 0
+  :let st_ctim_nsec I64: 0
   :let _unused0 U32: 0
   :let _unused1 U32: 0
 
@@ -306,6 +438,6 @@
   :let st_gid I16: 0
   :let st_rdev U32: 0 // dev_t
   :let st_size I64: 0
-  :let st_atime I64: 0 // time64_t
-  :let st_mtime I64: 0 // time64_t
-  :let st_ctime I64: 0 // time64_t
+  :let st_atim I64: 0 // time64_t
+  :let st_mtim I64: 0 // time64_t
+  :let st_ctim I64: 0 // time64_t

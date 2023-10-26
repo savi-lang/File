@@ -10,7 +10,44 @@
   :: The size of the file, in bytes.
   :let size USize
 
-  :new _new(@path, @size)
+  :: The last time the file's content was accessed.
+  :fun last_access_time Time
+    Time.unix_epoch +
+    Time.Duration.seconds(@_atime_s).plus_nanoseconds(@_atime_ns.u64)
+  :let _atime_s U64
+  :let _atime_ns U32
+
+  :: The last time the file's content was updated.
+  :fun last_modify_time Time
+    Time.unix_epoch +
+    Time.Duration.seconds(@_mtime_s).plus_nanoseconds(@_mtime_ns.u64)
+  :let _mtime_s U64
+  :let _mtime_ns U32
+
+  :: The last time the file's content or metadata were updated.
+  :fun last_change_time Time
+    Time.unix_epoch +
+    Time.Duration.seconds(@_ctime_s).plus_nanoseconds(@_ctime_ns.u64)
+  :let _ctime_s U64
+  :let _ctime_ns U32
+
+  :: The time the file was created (if the platform supports this field).
+  :: Raises an error if this field is not supported and the value is unknown.
+  :fun birth_time! Time
+    error! if @_btime_s == 0 && @_btime_ns == 0
+    Time.unix_epoch +
+    Time.Duration.seconds(@_btime_s).plus_nanoseconds(@_btime_ns.u64)
+  :let _btime_s U64
+  :let _btime_ns U32
+
+  :new _new(
+    @path
+    @size
+    @_atime_s, @_atime_ns
+    @_mtime_s, @_mtime_ns
+    @_ctime_s, @_ctime_ns
+    @_btime_s, @_btime_ns
+  )
 
   :: Retrieve current information about the given file path.
   ::
