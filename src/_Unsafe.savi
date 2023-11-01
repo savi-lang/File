@@ -111,7 +111,7 @@
 
   :fun stat_as_file_info!(path File.Path.Any) File.Info
     try (
-      _FFI.stat_as_file_info!(path)
+      _FFI.Stat.stat_as_file_info!(path)
     |
       case _FFI.errno == (
       | OSError.success      | yield File.Result.BugInLibrary // (unsupported platform in the above function)
@@ -131,7 +131,7 @@
 
   :fun fstat_as_file_info!(path File.Path.Any, fd I32) File.Info
     try (
-      _FFI.fstat_as_file_info!(path, fd)
+      _FFI.Stat.fstat_as_file_info!(path, fd)
     |
       case _FFI.errno == (
       | OSError.success      | yield File.Result.BugInLibrary // (unsupported platform in the above function)

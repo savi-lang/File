@@ -1,0 +1,378 @@
+:module _FFI.Stat
+  :fun stat_as_file_info!(path File.Path.Any) File.Info
+    case (
+    | Platform.is_linux && Platform.is_64bit && Platform.is_x86 |
+      linux_x8664 = _FFI.Stat.LinuxX8664.new
+      result = @stat_linux_x8664(path.string.cstring, stack_address_of_variable linux_x8664)
+      error! if result == -1
+      File.Info._new(
+        path
+        linux_x8664.st_size.usize
+        linux_x8664.st_atim.u64
+        linux_x8664.st_atim_nsec.u32
+        linux_x8664.st_mtim.u64
+        linux_x8664.st_mtim_nsec.u32
+        linux_x8664.st_ctim.u64
+        linux_x8664.st_ctim_nsec.u32
+        0 // linux_x8664.st_btim.u64
+        0 // linux_x8664.st_btim_nsec.u32
+      )
+    | Platform.is_linux && Platform.is_64bit && Platform.is_arm |
+      linux_arm64 = _FFI.Stat.LinuxArm64.new
+      result = @stat_linux_arm64(path.string.cstring, stack_address_of_variable linux_arm64)
+      error! if result == -1
+      File.Info._new(
+        path
+        linux_arm64.st_size.usize
+        linux_arm64.st_atim.u64
+        linux_arm64.st_atim_nsec.u32
+        linux_arm64.st_mtim.u64
+        linux_arm64.st_mtim_nsec.u32
+        linux_arm64.st_ctim.u64
+        linux_arm64.st_ctim_nsec.u32
+        0 // linux_arm64.st_btim.u64
+        0 // linux_arm64.st_btim_nsec.u32
+      )
+    | Platform.is_linux && Platform.is_32bit && Platform.is_arm |
+      linux_arm32 = _FFI.Stat.LinuxArm32.new
+      result = @stat_linux_arm32(path.string.cstring, stack_address_of_variable linux_arm32)
+      error! if result == -1
+      File.Info._new(
+        path
+        linux_arm32.st_size.usize
+        linux_arm32.st_atim.u64
+        linux_arm32.st_atim_nsec.u32
+        linux_arm32.st_mtim.u64
+        linux_arm32.st_mtim_nsec.u32
+        linux_arm32.st_ctim.u64
+        linux_arm32.st_ctim_nsec.u32
+        0 // linux_arm32.st_btim.u64
+        0 // linux_arm32.st_btim_nsec.u32
+      )
+    | Platform.is_bsd |
+      freebsd = _FFI.Stat.FreeBSD.new
+      result = @stat_freebsd(path.string.cstring, stack_address_of_variable freebsd)
+      error! if result == -1
+      File.Info._new(
+        path
+        freebsd.st_size.usize
+        freebsd.st_atim.u64
+        freebsd.st_atim_nsec.u32
+        freebsd.st_mtim.u64
+        freebsd.st_mtim_nsec.u32
+        freebsd.st_ctim.u64
+        freebsd.st_ctim_nsec.u32
+        freebsd.st_btim.u64
+        freebsd.st_btim_nsec.u32
+      )
+    | Platform.is_macos |
+      macos = _FFI.Stat.MacOS.Stat64.new
+      result = @stat64_macos(path.string.cstring, stack_address_of_variable macos)
+      error! if result == -1
+      File.Info._new(
+        path
+        macos.st_size.usize
+        macos.st_atim.u64
+        macos.st_atim_nsec.u32
+        macos.st_mtim.u64
+        macos.st_mtim_nsec.u32
+        macos.st_ctim.u64
+        macos.st_ctim_nsec.u32
+        macos.st_btim.u64
+        macos.st_btim_nsec.u32
+      )
+    | Platform.is_windows |
+      windows = _FFI.Stat.Windows.Stat64.new
+      result = @stat64_windows(path.string.cstring, stack_address_of_variable windows)
+      error! if result == -1
+      File.Info._new(
+        path
+        windows.st_size.usize
+        windows.st_atim.u64
+        0 // windows.st_atim_nsec.u32
+        windows.st_mtim.u64
+        0 // windows.st_mtim_nsec.u32
+        windows.st_ctim.u64
+        0 // windows.st_ctim_nsec.u32
+        0 // windows.st_btim.u64
+        0 // windows.st_btim_nsec.u32
+      )
+    |
+      _FFI.clear_errno
+      error!
+    )
+  :ffi stat_linux_x8664(path CPointer(U8), stat CPointer(_FFI.Stat.LinuxX8664)) I32
+    :foreign_name stat
+  :ffi stat_linux_arm64(path CPointer(U8), stat CPointer(_FFI.Stat.LinuxArm64)) I32
+    :foreign_name stat
+  :ffi stat_linux_arm32(path CPointer(U8), stat CPointer(_FFI.Stat.LinuxArm32)) I32
+    :foreign_name stat
+  :ffi stat_freebsd(path CPointer(U8), stat CPointer(_FFI.Stat.FreeBSD)) I32
+    :foreign_name stat
+  :ffi stat64_macos(path CPointer(U8), stat CPointer(_FFI.Stat.MacOS.Stat64)) I32
+    :foreign_name stat64
+  :ffi stat64_windows(path CPointer(U8), stat CPointer(_FFI.Stat.Windows.Stat64)) I32
+    :foreign_name _stat64
+
+  :fun fstat_as_file_info!(path File.Path.Any, fd I32) File.Info
+    case (
+    | Platform.is_linux && Platform.is_64bit && Platform.is_x86 |
+      linux_x8664 = _FFI.Stat.LinuxX8664.new
+      result = @fstat_linux_x8664(fd, stack_address_of_variable linux_x8664)
+      error! if result == -1
+      File.Info._new(
+        path
+        linux_x8664.st_size.usize
+        linux_x8664.st_atim.u64
+        linux_x8664.st_atim_nsec.u32
+        linux_x8664.st_mtim.u64
+        linux_x8664.st_mtim_nsec.u32
+        linux_x8664.st_ctim.u64
+        linux_x8664.st_ctim_nsec.u32
+        0 // linux_x8664.st_btim.u64
+        0 // linux_x8664.st_btim_nsec.u32
+      )
+    | Platform.is_linux && Platform.is_64bit && Platform.is_arm |
+      linux_arm64 = _FFI.Stat.LinuxArm64.new
+      result = @fstat_linux_arm64(fd, stack_address_of_variable linux_arm64)
+      error! if result == -1
+      File.Info._new(
+        path
+        linux_arm64.st_size.usize
+        linux_arm64.st_atim.u64
+        linux_arm64.st_atim_nsec.u32
+        linux_arm64.st_mtim.u64
+        linux_arm64.st_mtim_nsec.u32
+        linux_arm64.st_ctim.u64
+        linux_arm64.st_ctim_nsec.u32
+        0 // linux_arm64.st_btim.u64
+        0 // linux_arm64.st_btim_nsec.u32
+      )
+    | Platform.is_linux && Platform.is_32bit && Platform.is_arm |
+      linux_arm32 = _FFI.Stat.LinuxArm32.new
+      result = @fstat_linux_arm32(fd, stack_address_of_variable linux_arm32)
+      error! if result == -1
+      File.Info._new(
+        path
+        linux_arm32.st_size.usize
+        linux_arm32.st_atim.u64
+        linux_arm32.st_atim_nsec.u32
+        linux_arm32.st_mtim.u64
+        linux_arm32.st_mtim_nsec.u32
+        linux_arm32.st_ctim.u64
+        linux_arm32.st_ctim_nsec.u32
+        0 // linux_arm32.st_btim.u64
+        0 // linux_arm32.st_btim_nsec.u32
+      )
+    | Platform.is_bsd |
+      freebsd = _FFI.Stat.FreeBSD.new
+      result = @fstat_freebsd(fd, stack_address_of_variable freebsd)
+      error! if result == -1
+      File.Info._new(
+        path
+        freebsd.st_size.usize
+        freebsd.st_atim.u64
+        freebsd.st_atim_nsec.u32
+        freebsd.st_mtim.u64
+        freebsd.st_mtim_nsec.u32
+        freebsd.st_ctim.u64
+        freebsd.st_ctim_nsec.u32
+        freebsd.st_btim.u64
+        freebsd.st_btim_nsec.u32
+      )
+    | Platform.is_macos |
+      macos = _FFI.Stat.MacOS.Stat64.new
+      result = @fstat64_macos(fd, stack_address_of_variable macos)
+      error! if result == -1
+      File.Info._new(
+        path
+        macos.st_size.usize
+        macos.st_atim.u64
+        macos.st_atim_nsec.u32
+        macos.st_mtim.u64
+        macos.st_mtim_nsec.u32
+        macos.st_ctim.u64
+        macos.st_ctim_nsec.u32
+        macos.st_btim.u64
+        macos.st_btim_nsec.u32
+      )
+    | Platform.is_windows |
+      windows = _FFI.Stat.Windows.Stat64.new
+      result = @fstat64_windows(fd, stack_address_of_variable windows)
+      error! if result == -1
+      File.Info._new(
+        path
+        windows.st_size.usize
+        windows.st_atim.u64
+        0 // windows.st_atim_nsec.u32
+        windows.st_mtim.u64
+        0 // windows.st_mtim_nsec.u32
+        windows.st_ctim.u64
+        0 // windows.st_ctim_nsec.u32
+        0 // windows.st_btim.u64
+        0 // windows.st_btim_nsec.u32
+      )
+    |
+      _FFI.clear_errno
+      error!
+    )
+  :ffi fstat_linux_x8664(fd I32, stat CPointer(_FFI.Stat.LinuxX8664)) I32
+    :foreign_name fstat
+  :ffi fstat_linux_arm64(fd I32, stat CPointer(_FFI.Stat.LinuxArm64)) I32
+    :foreign_name fstat
+  :ffi fstat_linux_arm32(fd I32, stat CPointer(_FFI.Stat.LinuxArm32)) I32
+    :foreign_name fstat
+  :ffi fstat_freebsd(fd I32, stat CPointer(_FFI.Stat.FreeBSD)) I32
+    :foreign_name fstat
+  :ffi fstat64_macos(fd I32, stat CPointer(_FFI.Stat.MacOS.Stat64)) I32
+    :foreign_name fstat64
+  :ffi fstat64_windows(fd I32, stat CPointer(_FFI.Stat.Windows.Stat64)) I32
+    :foreign_name _fstat64
+
+
+:struct _FFI.Stat.LinuxX8664
+  :let st_dev U64: 0 // dev_t
+  :let st_ino U64: 0 // ino_t
+  :let st_nlink U64: 0 // nlink_t
+  :let st_mode U32: 0 // mode_t
+  :let st_uid U32: 0 // uid_t
+  :let st_gid U32: 0 // gid_t
+  :let _pad0 I32: 0
+  :let st_rdev U64: 0 // dev_t
+  :let st_size ISize: 0 // off_t
+  :let st_blksize ISize: 0 // blksize_t
+  :let st_blocks ISize: 0 // blkcnt_t
+  :let st_atim ISize: 0
+  :let st_atim_nsec ISize: 0
+  :let st_mtim ISize: 0
+  :let st_mtim_nsec ISize: 0
+  :let st_ctim ISize: 0
+  :let st_ctim_nsec ISize: 0
+  :let _reserved0 ISize: 0
+  :let _reserved1 ISize: 0
+  :let _reserved2 ISize: 0
+
+:struct _FFI.Stat.LinuxArm64
+  :let st_dev U64: 0 // dev_t
+  :let st_ino U64: 0 // ino_t
+  :let st_mode U32: 0 // mode_t
+  :let st_nlink U32: 0 // nlink_t
+  :let st_uid U32: 0 // uid_t
+  :let st_gid U32: 0 // gid_t
+  :let st_rdev U64: 0 // dev_t
+  :let _pad0 ISize: 0
+  :let st_size ISize: 0 // off_t
+  :let st_blksize ISize: 0 // blksize_t
+  :let _pad1 I32: 0
+  :let st_blocks I64: 0 // blkcnt_t
+  :let st_atim I64: 0
+  :let st_atim_nsec I64: 0
+  :let st_mtim I64: 0
+  :let st_mtim_nsec I64: 0
+  :let st_ctim I64: 0
+  :let st_ctim_nsec I64: 0
+  :let _unused0 U32: 0
+  :let _unused1 U32: 0
+
+:struct _FFI.Stat.LinuxArm32
+  :let st_dev U64: 0 // dev_t
+  :let _pad0 I32: 0
+  :let _st_ino_truncated ISize: 0
+  :let st_mode U32: 0 // mode_t
+  :let st_nlink U32: 0 // nlink_t
+  :let st_uid U32: 0 // uid_t
+  :let st_gid U32: 0 // gid_t
+  :let st_rdev U64: 0 // dev_t
+  :let _pad1 I32: 0
+  :let st_size ISize: 0 // off_t
+  :let st_blksize ISize: 0 // blksize_t
+  :let st_blocks I64: 0 // blkcnt_t
+  :let __st_atim32 ISize: 0
+  :let __st_atim32_nsec ISize: 0
+  :let __st_mtim32 ISize: 0
+  :let __st_mtim32_nsec ISize: 0
+  :let __st_ctim32 ISize: 0
+  :let __st_ctim32_nsec ISize: 0
+  :let st_ino U64: 0 // ino_t
+  :let st_atim I64: 0
+  :let st_atim_nsec I64: 0
+  :let st_mtim I64: 0
+  :let st_mtim_nsec I64: 0
+  :let st_ctim I64: 0
+  :let st_ctim_nsec I64: 0
+
+:struct _FFI.Stat.FreeBSD
+  :let st_dev U64: 0 // dev_t
+  :let st_ino U64: 0 // ino_t
+  :let st_nlink U64: 0 // nlink_t
+  :let st_mode U16: 0 // mode_t
+  :let _pad0 I16: 0
+  :let st_uid U32: 0 // uid_t
+  :let st_gid U32: 0 // gid_t
+  :let _pad1 I32: 0
+  :let st_rdev U64: 0 // dev_t
+  :let st_atim_ext I32: 0
+  :let st_atim ISize: 0 // time_t
+  :let st_atim_nsec I64: 0 // time_t
+  :let st_mtim_ext I32: 0
+  :let st_mtim ISize: 0 // time_t
+  :let st_mtim_nsec I64: 0 // time_t
+  :let st_ctim_ext I32: 0
+  :let st_ctim ISize: 0 // time_t
+  :let st_ctim_nsec I64: 0 // time_t
+  :let st_btim_ext I32: 0
+  :let st_btim ISize: 0 // time_t
+  :let st_btim_nsec I64: 0 // time_t
+  :let st_size I64: 0 // off_t
+  :let st_blocks I64: 0 // blkcnt_t
+  :let st_blksize I32: 0 // blksize_t
+  :let st_flags U32: 0 // flags_t
+  :let st_gen U64: 0
+  :let st_spare1 U64: 0
+  :let st_spare2 U64: 0
+  :let st_spare3 U64: 0
+  :let st_spare4 U64: 0
+  :let st_spare5 U64: 0
+  :let st_spare6 U64: 0
+  :let st_spare7 U64: 0
+  :let st_spare8 U64: 0
+  :let st_spare9 U64: 0
+  :let st_spare10 U64: 0
+
+:struct _FFI.Stat.MacOS.Stat64
+  :let st_dev I32: 0 // dev_t
+  :let st_mode U16: 0 // mode_t
+  :let st_nlink U16: 0 // nlink_t
+  :let st_ino U64: 0 // ino_t
+  :let st_uid U32: 0 // uid_t
+  :let st_gid U32: 0 // gid_t
+  :let st_rdev I32: 0 // dev_t
+  :let st_atim I64: 0 // time_t
+  :let st_atim_nsec I64: 0
+  :let st_mtim I64: 0 // time_t
+  :let st_mtim_nsec I64: 0
+  :let st_ctim I64: 0 // time_t
+  :let st_ctim_nsec I64: 0
+  :let st_btim I64: 0 // time_t
+  :let st_btim_nsec I64: 0
+  :let st_size I64: 0 // off_t
+  :let st_blocks U32: 0 // blkcnt_t
+  :let st_blksize I32: 0 // blksize_t
+  :let st_flags U32: 0
+  :let st_gen U32: 0
+  :let st_lspare I32: 0
+  :let st_qspare1 I64: 0
+  :let st_qspare2 I64: 0
+
+:struct _FFI.Stat.Windows.Stat64
+  :let st_dev U32: 0 // dev_t
+  :let st_ino U16: 0 // ino_t
+  :let st_mode U16: 0
+  :let st_nlink I16: 0
+  :let st_uid I16: 0
+  :let st_gid I16: 0
+  :let st_rdev U32: 0 // dev_t
+  :let st_size I64: 0
+  :let st_atim I64: 0 // time64_t
+  :let st_mtim I64: 0 // time64_t
+  :let st_ctim I64: 0 // time64_t
