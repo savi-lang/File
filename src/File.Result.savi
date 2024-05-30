@@ -51,8 +51,15 @@
   :member TooManyFilesOpenInSystem 405
   :member TooManySymbolicLinksFollowed 406
   :member TooManyFilesOpenInProcess 407
-  :member LowLevelIOFailed 408
-  :member LowLevelCorruption 409
+  :member TooManyWatchesOpenInSystem 408
+  :member LowLevelIOFailed 409
+  :member LowLevelCorruption 410
+
+  ///
+  // Fundamental problems with the system where the program is running.
+
+  :member PlatformDoesNotSupportFiles 501
+  :member PlatformDoesNotSupportWatching 502
 
   :fun description String
     case @ == (
@@ -155,6 +162,11 @@
       perhaps it needs to impose explicit limits on itself to prevent this. \
       It may be possible to increase the limit if more files are needed."
 
+    | File.Result.TooManyWatchesOpenInSystem |
+      "There are too many watched file paths currently in the system. \
+      This may be caused by a user-level limit or system-level limit. \
+      It may be possible to increase the limit if more watches are needed."
+
     | File.Result.LowLevelIOFailed |
       "A low-level I/O failure occurred while synchronizing state with the \
       underlying file. It may (or may not) help to retry the operation."
@@ -162,6 +174,16 @@
     | File.Result.LowLevelCorruption |
       "A low-level corruption while interacting with the file system \
       prevented success. It may (or may not) help to retry the operation."
+
+    | File.Result.PlatformDoesNotSupportFiles |
+      "The platform where the program is running does not support accessing \
+      files at all. The program is likely running on a sandboxed platform \
+      (such as WebAssembly in the browser)."
+
+    | File.Result.PlatformDoesNotSupportWatching |
+      "The platform where the program is running does not support watching \
+      watching files/directories. The only platforms with usable watching APIs \
+      are MacOS, Windows, Linux, and FreeBSD."
 
     |
       // This should be unreachable, if we've covered all the enum members.
