@@ -23,45 +23,47 @@
     callback File.Dumper.ResultActor = File.Dumper.ResultActor.None
   )
     try (
-      _Unsafe.check_path!(path.string) -> (error |
-        callback.result_of_dump_to_file(path, error)
+      _Unsafe.check_path!(path.string)
+    | error |
+      callback.result_of_dump_to_file(path, error)
+      return
+    )
+
+    fd = try (
+      _Unsafe.open_write_create!(path)
+    | error |
+      case error == (
+      | File.Result.PathPrefixNotFound |
+        // TODO: Create the prefix directories instead of being asinine.
+        None
+      | File.Result.AccessDenied |
+        if Platform.is_windows (
+          // TODO: Check if the path refers to a directory. If it is, switch
+          // the error to File.Result.PathIsDirectory, which is more helpful.
+        )
+      | File.Result.NeedsRetry |
+        @dump_to_file(path, chunks, callback) // try again
+        return
       )
 
-      fd = _Unsafe.open_write_create!(path) -> (error |
-        case error == (
-        | File.Result.PathPrefixNotFound |
-          // TODO: Create the prefix directories instead of being asinine.
-          None
-        | File.Result.AccessDenied |
-          if Platform.is_windows (
-            // TODO: Check if the path refers to a directory. If it is, switch
-            // the error to File.Result.PathIsDirectory, which is more helpful.
-          )
-        | File.Result.NeedsRetry |
-          @dump_to_file(path, chunks, callback) // try again
-          return
-        )
+      callback.result_of_dump_to_file(path, error)
+      return
+    )
 
-        callback.result_of_dump_to_file(path, error)
-      )
+    try (
+      _Unsafe.writev_loop!(fd, chunks)
+      _Unsafe.fsync!(fd)
+      _Unsafe.close!(fd)
 
-      try (
-        _Unsafe.writev_loop!(fd, chunks) -> (error |
-          callback.result_of_dump_to_file(path, error)
-        )
-        _Unsafe.fsync!(fd) -> (error |
-          callback.result_of_dump_to_file(path, error)
-        )
-        _Unsafe.close!(fd) -> (error |
-          callback.result_of_dump_to_file(path, error)
-        )
-        callback.result_of_dump_to_file(path, File.Result.Success)
-      |
-        // If any of the above steps failed, just close the file descriptor.
-        _Unsafe.close!(fd) -> (error |
-          // This is the failure path - we already called a callback with an
-          // error above, so we don't want to forward an additional error here,
-          // even if the close step failed with an error.
-        )
-      )
+      callback.result_of_dump_to_file(path, File.Result.Success)
+    | error |
+      callback.result_of_dump_to_file(path, error)
+
+      // If any of the above steps failed, just close the file descriptor.
+      //
+      // If this close raises an error we'll swallow it, because we are
+      // already in the failure path - we already called a callback with an
+      // error above, so we don't want to forward an additional error here,
+      // even if the close step failed with an error.
+      try _Unsafe.close!(fd)
     )

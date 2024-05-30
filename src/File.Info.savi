@@ -54,6 +54,4 @@
   :: Raises an error if the file does not exist or could not be accessed
   :: (for any reason).
   :fun non for!(path File.Path.Readable) File.Info
-    _Unsafe.stat_as_file_info!(path) -> (error |
-      // Silently ignore the specific kind of error - we won't show the caller.
-    )
+    _Unsafe.stat_as_file_info!(path)

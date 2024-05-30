@@ -23,42 +23,44 @@
     callback File.Loader.ResultActor
   )
     try (
-      _Unsafe.check_path!(path.string) -> (error |
-        callback.result_of_load_from_file(path, error, Bytes.new_iso)
-      )
-
-      fd = _Unsafe.open_read!(path) -> (error |
-        case error == (
-        | File.Result.AccessDenied |
-          if Platform.is_windows (
-            // TODO: Check if the path refers to a directory. If it is, switch
-            // the error to File.Result.PathIsDirectory, which is more helpful.
-          )
-        | File.Result.NeedsRetry |
-          @load_from_file(path, callback) // try again
-          return
-        )
-
-        callback.result_of_load_from_file(path, error, Bytes.new_iso)
-      )
-
-      try (
-        buffer = Bytes.new
-        _Unsafe.read_all!(path, fd, buffer) -> (error |
-          callback.result_of_load_from_file(path, error, buffer.take_buffer)
-        )
-
-        // Success!
-        result = File.Result.Success
-        callback.result_of_load_from_file(path, result, buffer.take_buffer)
-      )
-
-      // Close the file descriptor prior to exit (on success or failure).
-      _Unsafe.close!(fd) -> (error |
-        // Note that we don't deal with the error here, because it seems like
-        // there's not much we can do in the case of failure.
-        //
-        // At any rate, this is only a read operation, so it won't leave
-        // the filesystem in an inconsistent state. It seems unlikely to matter.
-      )
+      _Unsafe.check_path!(path.string)
+    | error |
+      callback.result_of_load_from_file(path, error, Bytes.new_iso)
+      return
     )
+
+    fd = try (
+      _Unsafe.open_read!(path)
+    | error |
+      case error == (
+      | File.Result.AccessDenied |
+        if Platform.is_windows (
+          // TODO: Check if the path refers to a directory. If it is, switch
+          // the error to File.Result.PathIsDirectory, which is more helpful.
+        )
+      | File.Result.NeedsRetry |
+        @load_from_file(path, callback) // try again
+        return
+      )
+      callback.result_of_load_from_file(path, error, Bytes.new_iso)
+      return
+    )
+
+    buffer = Bytes.new
+    result = File.Result.Success
+    try (
+      _Unsafe.read_all!(path, fd, buffer)
+    | error |
+      result = error
+    )
+
+    // Close the file descriptor prior to exit (on success or failure).
+    //
+    // Note that we don't deal with the error here, because it seems like
+    // there's not much we can do in the case of failure.
+    //
+    // At any rate, this is only a read operation, so it won't leave
+    // the filesystem in an inconsistent state. It seems unlikely to matter.
+    try _Unsafe.close!(fd)
+
+    callback.result_of_load_from_file(path, result, buffer.take_buffer)
