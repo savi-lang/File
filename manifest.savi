@@ -7,6 +7,17 @@
   :dependency Time v0
     :from "github:savi-lang/Time"
 
+  :dependency IO v0
+    :from "github:savi-lang/IO"
+    :depends on ByteStream
+    :depends on OSError
+
+  :transitive dependency ByteStream v0
+    :from "github:savi-lang/ByteStream"
+
+  :dependency Map v0
+    :from "github:savi-lang/Map"
+
 :manifest bin "spec"
   :copies File
   :sources "spec/*.savi"
@@ -17,9 +28,10 @@
     :depends on Time
     :depends on Timer
 
-  :transitive dependency Map v0
-    :from "github:savi-lang/Map"
-
   :transitive dependency Timer v0
     :from "github:savi-lang/Timer"
     :depends on Time
+
+:manifest bin "savi-watch"
+  :copies File
+  :sources "examples/savi-watch/*.savi"

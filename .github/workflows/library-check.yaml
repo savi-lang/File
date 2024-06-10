@@ -52,3 +52,25 @@ jobs:
   #
   # Add any custom jobs you need below this comment.
   # The area above this comment is reserved for future standard jobs.
+
+  # Run the `spec/integration` tests for this library.
+  integration:
+    if: github.repository != 'savi-lang/base-standard-library' # skip base repo
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, shell: bash }
+          - { os: macos-latest, shell: bash }
+          - { os: windows-latest, shell: 'wsl-bash {0}' }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: savi-lang/action-install@v1
+      - run: savi deps update --for savi-watch
+      - run: savi build savi-watch ${{ runner.os == 'Windows' && '--cross-compile=x86_64-unknown-windows-msvc' || '' }}
+      - if: runner.os == 'Linux'
+        run: spec/integration/run-all.sh

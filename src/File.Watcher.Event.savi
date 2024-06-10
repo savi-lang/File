@@ -1,0 +1,66 @@
+:struct val File.Watcher.Event
+  :: The path that was affected by the event.
+  :let path File.Path.Readable
+
+  :: The descriptor that identifies the associated watch.
+  :let _wd U32
+
+  :: Flags giving various bits of information about the event that occurred.
+  :let _flags U16
+
+  :const _flag_added          U16:   0x1
+  :const _flag_updated        U16:   0x2
+  :const _flag_removed        U16:   0x4
+  :const _flag_renamed        U16:   0x8
+  :const _flag_owner_modified U16:  0x10
+  :const _flag_attr_modified  U16:  0x20
+  :const _flag_moved_from     U16:  0x40
+  :const _flag_moved_to       U16:  0x80
+  :const _flag_is_directory   U16: 0x100
+
+  :new _new(@path, @_wd, @_flags)
+
+  :: Returns True if this event has no flags to show the event receiver.
+  :fun _is_empty Bool: @_flags == 0
+
+  :: Returns True if the object at that path has now been added.
+  :fun is_added Bool: @_flags.bit_and(@_flag_added) != 0
+
+  :: Returns True if the object at that path has now been updated.
+  :fun is_updated Bool: @_flags.bit_and(@_flag_updated) != 0
+
+  :: Returns True if the object at that path has now been removed.
+  :fun is_removed Bool: @_flags.bit_and(@_flag_removed) != 0
+
+  :: Returns True if the object at that path has now been renamed.
+  :fun is_renamed Bool: @_flags.bit_and(@_flag_renamed) != 0
+
+  :: Returns True if the owner has been modified for the object at that path.
+  :fun is_owner_modified Bool: @_flags.bit_and(@_flag_owner_modified) != 0
+
+  :: Returns True if attributes have been modified for the object at that path.
+  :fun is_attr_modified Bool: @_flags.bit_and(@_flag_attr_modified) != 0
+
+  :: Returns True if an object has been moved from that path to somewhere else.
+  :fun is_moved_from Bool: @_flags.bit_and(@_flag_moved_from) != 0
+
+  :: Returns True if an object has been moved to that path from somewhere else.
+  :fun is_moved_to Bool: @_flags.bit_and(@_flag_moved_to) != 0
+
+  :: Returns True if the object at that path is a directory.
+  :fun is_directory Bool: @_flags.bit_and(@_flag_is_directory) != 0
+
+  :is TraceData
+  :fun box trace_data(trace TraceData.Observer) None
+    trace.object(0) -> (
+      trace.property("path", @path.string) // TODO: make Path a TraceData
+      if @is_added          trace.property("is_added", True)
+      if @is_updated        trace.property("is_updated", True)
+      if @is_removed        trace.property("is_removed", True)
+      if @is_renamed        trace.property("is_renamed", True)
+      if @is_owner_modified trace.property("is_owner_modified", True)
+      if @is_attr_modified  trace.property("is_attr_modified", True)
+      if @is_moved_from     trace.property("is_moved_from", True)
+      if @is_moved_to       trace.property("is_moved_to", True)
+      if @is_directory      trace.property("is_directory", True)
+    )

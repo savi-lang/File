@@ -78,4 +78,3 @@
     assert: path == @path
     loader = File.Loader.new
     loader.load_from_file(@path, @load_callback)
-
