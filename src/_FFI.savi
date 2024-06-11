@@ -14,15 +14,15 @@
   :fun o_append I32: if Platform.is_windows (0x8 | 0x400)
   :fun o_binary I32: if Platform.is_windows (0x8000 | 0) // windows only
 
-  :fun open(path, flags, mode)
+  :fun open(path, flags, mode U32)
     if Platform.is_posix (
       @open_posix(path, flags, mode)
     |
       @open_windows(path, flags, mode)
     )
-  :ffi open_posix(path CPointer(U8), flags I32, mode U32) I32
+  :ffi variadic open_posix(path CPointer(U8), flags I32) I32
     :foreign_name open
-  :ffi open_windows(path CPointer(U8), flags I32, mode U32) I32
+  :ffi variadic open_windows(path CPointer(U8), flags I32) I32
     :foreign_name _open
 
   :fun read(fd, buf, count USize)
