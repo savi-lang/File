@@ -64,3 +64,9 @@
   // TODO: windows
   :ffi close(fd I32) I32
     :foreign_name close
+
+  :ffi asio_event_create(
+    owner AsioEvent.Actor
+    fd I32, flags U32, nsec U64, noisy Bool
+  ) AsioEvent.ID
+    :foreign_name pony_asio_event_create

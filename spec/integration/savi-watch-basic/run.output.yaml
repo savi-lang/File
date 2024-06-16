@@ -1,0 +1,36 @@
+# File.Result.Success
+--- #
+  path: "/tmp/savi-watch-test/file1"
+  is_added: True
+  is_updated: True
+--- #
+  path: "/tmp/savi-watch-test/file1"
+  is_updated: True
+--- #
+  path: "/tmp/savi-watch-test/file1"
+  is_updated: True
+  is_attr_modified: True
+--- #
+  path: "/tmp/savi-watch-test/file2"
+  is_added: True
+  is_updated: True
+  is_attr_modified: True
+--- #
+  path: "/tmp/savi-watch-test/file2"
+  is_removed: True
+--- #
+  path: "/tmp/savi-watch-test/dir1"
+  is_added: True
+  is_directory: True
+--- #
+  path: "/tmp/savi-watch-test/dir2"
+  is_added: True
+  is_directory: True
+--- #
+  path: "/tmp/savi-watch-test/dir1"
+  is_attr_modified: True
+  is_directory: True
+--- #
+  path: "/tmp/savi-watch-test/dir1"
+  is_removed: True
+  is_directory: True

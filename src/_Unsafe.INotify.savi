@@ -1,0 +1,106 @@
+:: See docs for `_Unsafe`.
+:module _Unsafe.INotify
+  :fun init! I32
+    :errors File.Result
+
+    fd = _FFI.INotify.init(_FFI.INotify.flag_nonblock)
+    if fd == -1 (
+      case _FFI.errno == (
+      | OSError.EMFILE | error! File.Result.TooManyFilesOpenInProcess
+      | OSError.ENFILE | error! File.Result.TooManyFilesOpenInSystem
+      | OSError.ENOMEM | error! File.Result.MemoryBufferExhausted
+      | 0              | None // TODO: this unreachable case shouldn't be necessary
+      |                  error! File.Result.BugInLibrary
+      )
+    )
+    fd
+
+  :fun add_watch!(fd I32, path File.Path.Readable) I32
+    wd = _FFI.INotify.add_watch(
+      fd, path.string.cstring, _FFI.INotify.Event.flag_all_relevant_events
+    )
+    if wd == -1 (
+      case _FFI.errno == (
+      | OSError.EACCES       | error! File.Result.AccessDenied
+      | OSError.ENAMETOOLONG | error! File.Result.PathTooLong
+      | OSError.ENOENT       | error! File.Result.PathNotFound
+      | OSError.ENOMEM       | error! File.Result.MemoryBufferExhausted
+      | OSError.ENOSPC       | error! File.Result.TooManyWatchesOpenInSystem
+      | 0                    | None // TODO: this unreachable case shouldn't be necessary
+      |                        error! File.Result.BugInLibrary
+      )
+    )
+    wd
+
+  :fun remove_watch!(fd I32, wd I32) None
+    res = _FFI.INotify.rm_watch(fd, wd)
+
+    if res == -1 (
+      // Every possible case of _FFI.errno is "impossible" here because
+      // we know that fd and wd are valid. So if we get an error, it's a bug.
+      error! File.Result.BugInLibrary
+    )
+
+  :: Try to read an event from the file descriptor (and/or the given buffer
+  :: of data that was partially read previously from the file descriptor).
+  ::
+  :: Returns the event if one was read, or raises an error code otherwise.
+  ::
+  :: The caller should call again immediately if an event was read.
+  :: The caller should call again later if NeedsRetry error code was raised.
+  :: If any other error code is raised, there is a more serious issue.
+  :fun read!(
+    fd I32, buffer Bytes'ref, count_hint USize = 10
+  ) _FFI.INotify.Event
+    :errors File.Result
+
+    // First, try to chop an event from the head of the buffer.
+    // This can happen if we obtained more than one event in the buffer in the
+    // previous `read!` call, but we didn't yet chop all of them out.
+    // If we're able to chop an event, we return it immediately,
+    // without continuing on to read more from the file descriptor.
+    try (
+      event = _FFI.INotify.Event.chop_from_buffer!(buffer)
+      return event
+    )
+
+    // Check the amount of free space left in the buffer.
+    // If there is insufficent space to read one max event, we'll reserve more,
+    // because having too small a buffer can cause EINVAL on Linux > 2.6.21.
+    // This also handles the initial case for a buffer created with zero space.
+    free_space = buffer.space - buffer.size
+    if free_space < _FFI.INotify.Event.max_total_byte_size (
+      // Allocate a buffer that can hold at least `count_hint` events, though
+      // it can hold significantly more if the path lengths are short.
+      buffer.reserve(count_hint * (
+        _FFI.INotify.Event.header_byte_size + _FFI.INotify.path_max + 1
+      ))
+      free_space = buffer.space - buffer.size
+    )
+
+    // Try to read into the free space of the buffer.
+    // If we're unable to read, we'll raise an error code and error out.
+    read_bytes = _FFI.read(fd, buffer.cpointer.offset(buffer.size), free_space)
+    if read_bytes == -1 (
+      case _FFI.errno == (
+      | OSError.EIO     | error! File.Result.LowLevelIOFailed
+      | OSError.ENOBUFS | error! File.Result.MemoryBufferFailed
+      | OSError.ENOMEM  | error! File.Result.MemoryBufferExhausted
+      | OSError.EINTR   | error! File.Result.NeedsRetry
+      | OSError.EAGAIN  | error! File.Result.NeedsRetry
+      | 0               | None // TODO: this unreachable case shouldn't be necessary
+      |                   error! File.Result.BugInLibrary
+      )
+    )
+    buffer.resize_possibly_including_uninitialized_memory(
+      buffer.size + read_bytes.usize
+    )
+
+    // Try to chop an event from the head of the buffer.
+    // If we're unable to read a full event, raise a retry error code and error.
+    // Otherwise, we return the event.
+    try (
+      _FFI.INotify.Event.chop_from_buffer!(buffer)
+    |
+      error! File.Result.NeedsRetry
+    )

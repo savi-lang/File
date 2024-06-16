@@ -64,6 +64,7 @@
 
 :trait val File.Path.Any
   :let string String
+  :fun hash USize: @string.hash
   :fun "=="(other File.Path.Any'box): @string == other.string
 
 :trait val File.Path.Readable

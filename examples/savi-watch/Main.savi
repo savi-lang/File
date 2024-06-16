@@ -1,0 +1,31 @@
+:actor Main
+  :let env Env
+  :new (@env)
+    try (
+      File.Watcher.new.watch_files(@get_path!, @)
+    |
+      @print_usage
+      @env.exit_code = 1
+    )
+
+  :fun print_usage
+    @env.out.print("Usage: \(try (@env.args[0]! | "savi-watch")) PATH")
+
+  :fun get_path!
+    error! if @env.args.size != 2
+    File.Path.new(@env.root, @env.args[1]!)
+
+  :is File.Watcher.ResultActor
+  :be result_of_watch_files(
+    watch_path File.Path.Readable
+    result File.Result
+  )
+    @env.out.write("# ")
+    @env.out.print(Inspect[result])
+
+  :be event_from_watch_files(
+    watch_path File.Path.Readable
+    event File.Watcher.Event
+  )
+    @env.out.write("--- ")
+    @env.out.print(Inspect[event])

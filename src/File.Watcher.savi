@@ -1,0 +1,64 @@
+// TODO: Requiring a behavior here is overly restrictive - need to iron out
+// how to construct async callbacks in general - likely using fat pointers.
+:trait tag File.Watcher.ResultActor
+  :: This will be called as a callback after requesting to watch a file path,
+  :: indicating whether the watch initiation was successful or not.
+  ::
+  :: If the attempt was successful, `result` will be `File.Result.Success`,
+  :: and all further changes at that path or its subpaths will emit events.
+  ::
+  :: On error, `result` will indicate a specific error code, and no events
+  :: from that `watch_path` will be emitted.
+  :be result_of_watch_files(
+    watch_path File.Path.Readable
+    result File.Result
+  )
+
+  :: This will be called whenever an event occurs within a sub-path of an
+  :: active `watch_path`, passing along the `event` that occurred.
+  :be event_from_watch_files(
+    watch_path File.Path.Readable
+    event File.Watcher.Event
+  )
+
+:: Watch files on disk, calling the given callback whenever any event happens
+:: within a sub-path of the given `watch_path`.
+:actor File.Watcher
+  :is _IOActorFileWatcherEvent
+  :let io File.Watcher.Engine
+
+  :new
+    // Set up the appropriate IO engine for the given platform.
+    @io = case (
+    // TODO: | Platform.is_macos   | File.Watcher.Engine.FSEvents.new(@)
+    // TODO: | Platform.is_windows | File.Watcher.Engine.Windows.new(@)
+    | Platform.is_linux   | File.Watcher.Engine.INotify.try_new(@)
+    // TODO: | Platform.is_bsd     | File.Watcher.Engine.KQueue.new(@)
+    |                       File.Watcher.Engine.None.new
+    )
+
+  :be watch_files(
+    watch_path File.Path.Readable
+    callback File.Watcher.ResultActor
+  )
+    @io.add_watch(watch_path, callback)
+
+  :fun ref io_react(event File.Watcher.Event) @
+    @
+
+// TODO: Use IO.Actor(File.Watcher.Event) instead of defining this
+:trait tag _IOActorFileWatcherEvent
+  :is AsioEvent.Actor
+  :fun io @->(File.Watcher.Engine)
+  :fun ref io_react(action File.Watcher.Event) @
+
+  :be io_deferred_action(input_action File.Watcher.Event)
+    @io.deferred_action(input_action) -> (action | @io_react(action))
+
+  :: This is a special behaviour that hooks into the AsioEvent.Actor runtime,
+  :: called whenever an event handle we're subscribed to receives an event.
+  ::
+  :: We expect the _io engine to interpret the event into an action to yield,
+  :: and we will forward the yielded action the the io_react method.
+  :be _asio_event(event AsioEvent)
+    @io.react(event) -> (action | @io_react(action))

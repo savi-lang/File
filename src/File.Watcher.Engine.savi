@@ -1,0 +1,230 @@
+
+// TODO: Use IO.Engine(File.Watcher.Event) instead of defining this
+:trait _IOEngineFileWatcherEvent
+  :fun ref react(event AsioEvent) @
+    :yields File.Watcher.Event for None
+
+  :fun ref deferred_action(input_action File.Watcher.Event) @
+    // TODO: :yields File.Watcher.Event for None
+    yield input_action
+    @
+
+:trait File.Watcher.Engine
+  :is _IOEngineFileWatcherEvent
+
+  :fun ref add_watch(
+    watch_path File.Path.Readable
+    callback File.Watcher.ResultActor
+  ) @
+
+:class File.Watcher.Engine.None
+  :is File.Watcher.Engine
+
+  :fun ref add_watch(
+    watch_path File.Path.Readable
+    callback File.Watcher.ResultActor
+  ) @
+    // Just notify the caller that watching is not supported on this platform.
+    callback.result_of_watch_files(watch_path
+      File.Result.PlatformDoesNotSupportWatching
+    )
+    @
+
+  :fun ref react(event AsioEvent): @
+    :yields File.Watcher.Event for None
+
+:class File.Watcher.Engine.FailedSetup
+  :is File.Watcher.Engine
+
+  :let error File.Result
+  :new (@error)
+
+  :fun ref add_watch(
+    watch_path File.Path.Readable
+    callback File.Watcher.ResultActor
+  ) @
+    // Just notify the caller that about the failure that was observed.
+    callback.result_of_watch_files(watch_path, @error)
+    @
+
+  :fun ref react(event AsioEvent): @
+    :yields File.Watcher.Event for None
+
+:class File.Watcher.Engine.INotify
+  :is File.Watcher.Engine
+
+  :let _fd I32
+  :let _event AsioEvent.ID
+  :new _new(@_fd, @_event)
+
+  :let _buffer: Bytes.new
+  :let _paths_by_wd: Map(I32, File.Path.Readable).new
+  :let _callbacks_by_wd: Map(I32, Array(File.Watcher.ResultActor)).new
+  :let _wds_by_path: Map(File.Path.Readable, I32).new
+  // :let _explicit_parent_wd_by_wd: Map(I32, I32).new
+  // :let _implicit_child_wds_by_wd: Map(I32, I32).new
+  :let _remove_wds: Array(I32).new
+  :let _forget_wds: Array(I32).new
+
+  :fun non try_new(actor _IOActorFileWatcherEvent) File.Watcher.Engine
+    fd = try (
+      _Unsafe.INotify.init!
+    | error |
+      return File.Watcher.Engine.FailedSetup.new(error)
+    )
+    asio_flags = AsioEvent.Flags.read
+    event = _FFI.asio_event_create(actor, fd, asio_flags, 0, True)
+    @_new(fd, event)
+
+  :fun ref add_watch(
+    watch_path File.Path.Readable
+    callback File.Watcher.ResultActor
+  ) @
+    // If we already have a watch for this path, just add this callback
+    // (unless we already have it registered as a callback for this path).
+    try (
+      callbacks = @_callbacks_by_wd[@_wds_by_path[watch_path]!]!
+      if !callbacks.has_any -> (c | c === callback) callbacks << callback
+      return @
+    )
+
+    // Otherwise, try to add it as a new watch.
+    try (
+      wd = _Unsafe.INotify.add_watch!(@_fd, watch_path)
+      @_wds_by_path[watch_path] = wd
+      @_paths_by_wd[wd] = watch_path
+      @_callbacks_by_wd[wd] = [callback]
+      callback.result_of_watch_files(watch_path, File.Result.Success)
+    | error |
+      callback.result_of_watch_files(watch_path, error)
+    )
+
+    @
+
+  :fun ref react(input_event AsioEvent) @
+    :yields File.Watcher.Event
+    return @ unless input_event.id === @_event
+    return @ unless input_event.is_readable
+    @each_coalesced_event -> (event |
+      yield event
+
+      // TODO: Figure out how to call the callback from File.Watcher
+      // (the yield above_ instead of from inside the File.Watcher.Engine.
+      try (
+        watch_path = @_paths_by_wd[event._wd.i32]!
+        @_callbacks_by_wd[event._wd.i32]!.each -> (callback |
+          callback.event_from_watch_files(watch_path, event)
+        )
+      )
+    )
+    @cleanup_after_events
+    @
+
+  :fun ref each_coalesced_event
+    @each_coalesced_raw_event -> (raw_event |
+      try (
+        yield @handle_and_convert_raw_event!(raw_event)
+      )
+    )
+
+  :fun ref each_coalesced_raw_event
+    last_raw_event = _FFI.INotify.Event._none
+    @each_pending_raw_event -> (raw_event |
+      case (
+      | last_raw_event.is_none |
+        last_raw_event = raw_event
+      | raw_event.wd == last_raw_event.wd && raw_event.name == last_raw_event.name |
+        last_raw_event = _FFI.INotify.Event._new(
+          raw_event.wd
+          raw_event.mask.bit_or(last_raw_event.mask)
+          raw_event.cookie
+          raw_event.len
+          raw_event.name
+        )
+      |
+        yield last_raw_event
+        last_raw_event = raw_event
+      )
+    )
+    yield last_raw_event if !last_raw_event.is_none
+
+  :fun ref each_pending_raw_event
+    // Read as many events as we can read from the buffer, yielding each one.
+    while True (
+      try (
+        yield _Unsafe.INotify.read!(@_fd, @_buffer)
+      | error |
+        // If we failed to read an event with a code indicating a retry is
+        // needed, that means we should try again later (and stop looping).
+        break if error == File.Result.NeedsRetry
+
+        // // If we get any other error (which will be some kind of "stress" error)
+        // // we forward the error to all the callbacks and try again later.
+        // @_callbacks_by_wd.each_pair -> (pair |
+        //   wd = pair.key
+        //   callbacks = pair.value
+
+        //   callbacks.each -> (callback |
+        //     try callback.result_of_watch_files(@_paths_by_wd[wd]!, error)
+        //   )
+        // )
+        // TODO: We also need to remove the related watches and callbacks.
+        break
+      )
+    )
+
+  :fun ref cleanup_after_events
+    // Remove any watches that need to be removed.
+    @_remove_wds.each -> (wd |
+      try _Unsafe.INotify.remove_watch!(@_fd, wd)
+      try @_wds_by_path.delete(@_paths_by_wd[wd]!)
+      @_paths_by_wd.delete(wd)
+      @_callbacks_by_wd.delete(wd)
+    )
+    @_remove_wds.clear
+
+    // Forget any watches that need to be forgotten.
+    @_forget_wds.each -> (wd |
+      @_paths_by_wd.delete(wd)
+      @_callbacks_by_wd.delete(wd)
+    )
+
+  :fun ref handle_and_convert_raw_event!(
+    raw_event _FFI.INotify.Event
+  ) File.Watcher.Event
+    paths_by_wd = @_paths_by_wd
+    watch_path = @_paths_by_wd[raw_event.wd]!
+    path = if raw_event.len > 1 (
+      watch_path.subpath(raw_event.name)
+    |
+      watch_path
+    )
+
+    flags = raw_event.to_standard_flags
+
+    // After a "delete self" raw_event, an "ignored" raw_event can be sent.
+    // Both are signs that we need to forget the watch, because inotify has.
+    if raw_event.is_delete_self || raw_event.is_ignored (
+      @_forget_wds << raw_event.wd
+    )
+
+    // After a "move self" raw_event, we no longer want to watch that object
+    // because it's no longer at the location that we aimed to watch.
+    if raw_event.is_move_self (
+      @_remove_wds << raw_event.wd
+    )
+
+    // // After a "create" raw_event for a subdirectory, we want to watch the new path.
+    // if (raw_event.is_create && raw_event.is_dir) (
+    //   try (
+    //     wd = _Unsafe.INotify.add_watch!(@_fd, path)
+    //     @_wds_by_path[path] = wd
+    //     @_paths_by_wd[wd] = path
+    //     // @_explicit_parent_wd_by_wd[wd] = raw_event.wd
+    //     // @_implicit_child_wds_by_wd[raw_event.wd]! << wd
+    //   )
+    // )
+
+    File.Watcher.Event._new(
+      path, raw_event.wd.u32, raw_event.to_standard_flags
+    )
