@@ -1,0 +1,250 @@
+:module _FFI.FSEvents
+  // :ffi init(flags I32) I32
+  //   :foreign_name inotify_init1
+
+  // :ffi add_watch(fd I32, path CPointer(U8), mask U32) I32
+  //   :foreign_name inotify_add_watch
+
+  // :ffi rm_watch(fd I32, wd I32) I32
+  //   :foreign_name inotify_rm_watch
+
+  // :fun path_max USize: 255
+
+  // :fun flag_nonblock I32: 0x800
+
+:module _FFI.FSEvents.CFString
+  :ffi _create_with_bytes(
+    allocator CPointer(None)
+    bytes CPointer(U8)
+    num_bytes ULong
+    encoding U32
+    is_external_representation U8
+  ) CPointer(_FFI.FSEvents.CFString)
+    :foreign_name CFStringCreateWithBytes
+
+  :const encoding_utf8 U32: 0x08000100
+
+  :fun from_string(string String'box) CPointer(_FFI.FSEvents.CFString)
+    @_create_with_bytes(
+      CPointer(None).null
+      string.cpointer
+      string.size
+      @encoding_utf8
+      0
+    )
+
+:module _FFI.FSEvents.CFString.Array
+  :ffi _create(
+    allocator CPointer(None)
+    values CPointer(CPointer(_FFI.FSEvents.CFString))
+    num_values USize
+    callbacks CPointer(_FFI.FSEvents.CFArrayCallBacks)
+  ) CPointer(_FFI.FSEvents.CFString.Array)
+    :foreign_name CFArrayCreate
+
+  :fun from_string(string String'box) CPointer(_FFI.FSEvents.CFString.Array)
+    cfstring = _FFI.FSEvents.CFString.from_string(string)
+    ptr = @_create(
+      CPointer(None).null
+      stack_address_of_variable cfstring
+      1
+      _FFI.FSEvents.CFArrayCallBacks.for_cf_types
+    )
+
+:module _FFI.FSEvents.CFArrayCallBacks // CFArrayCallBacks
+  :ffi global cpointer for_cf_types _FFI.FSEvents.CFArrayCallBacks
+    :foreign_name kCFTypeArrayCallBacks
+
+:struct _FFI.FSEvents.StreamContext // FSEventStreamContext
+  :let version: ULong.zero // the only valid version is 0
+  :let info CPointer(None)
+  :let retain: CPointer(None).null
+  :let release: CPointer(None).null
+  :let copy_description: CPointer(None).null
+
+  :fun new(@info)
+
+:module _FFI.FSEvents.Stream // FSEventStreamRef
+  :ffi _create(
+    allocator CPointer(None)
+    callback CPointer(None)
+    context CPointer(_FFI.FSEvents.StreamContext)
+    paths_to_watch CPointer(_FFI.FSEvents.CFArray)
+    since_when U64
+    latency F64 // in seconds
+    flags U32
+  ) CPointer(_FFI.FSEvents.Stream)
+    :foreign_name FSEventStreamCreate
+
+  :const _event_id_since_now: U64.max_value // kFSEventStreamEventIdSinceNow
+
+  :const _create_flag_use_cf_types      U32: 0x00000001 // kFSEventStreamCreateFlagUseCFTypes
+  :const _create_flag_no_defer          U32: 0x00000002 // kFSEventStreamCreateFlagNoDefer
+  :const _create_flag_watch_root        U32: 0x00000004 // kFSEventStreamCreateFlagWatchRoot
+  :const _create_flag_ignore_self       U32: 0x00000008 // kFSEventStreamCreateFlagIgnoreSelf
+  :const _create_flag_file_events       U32: 0x00000010 // kFSEventStreamCreateFlagFileEvents
+  :const _create_flag_mark_self         U32: 0x00000020 // kFSEventStreamCreateFlagMarkSelf
+  :const _create_flag_use_extended_data U32: 0x00000040 // kFSEventStreamCreateFlagUseExtendedData
+  :const _create_flag_full_history      U32: 0x00000080 // kFSEventStreamCreateFlagFullHistory
+  :const _create_flag_with_doc_id       U32: 0x00000100 // kFSEventStreamCreateWithDocID
+
+  :fun create_for_path(path String, callback, info, latency)
+    context = _FFI.FSEvents.StreamContext.new(info)
+    flags = @_create_flag_file_events
+      .bit_or(@_create_flag_no_defer)
+
+    @_create(
+      CPointer(None).null
+      callback
+      stack_address_of_variable context
+      _FFI.FSEvents.CFString.Array.from_string(path)
+      @_event_id_since_now
+      latency
+      0
+    )
+
+:module _FFI.FSEvents.DispatchQueue
+  :ffi _create(
+    label CPointer(U8)
+    attr CPointer(None) // use NULL for serial
+  ) CPointer(_FFI.FSEvents.DispatchQueue)
+    :foreign_name dispatch_queue_create
+
+  :fun create(label String)
+    @_create(label.cstring, CPointer(None).null)
+
+:struct val _FFI.FSEvents.Event
+  // :fun non header_byte_size USize: 16
+  // :fun non max_total_byte_size: @header_byte_size + _FFI.FSEvents.path_max + 1
+
+  // :fun non _none: @_new(0, 0, 0, 0, "")
+  // :fun is_none: @mask == 0
+
+  // // Header data.
+  // :let wd     I32 // Watch descriptor
+  // :let mask   U32 // Mask describing event
+  // :let cookie U32 // Unique cookie associating related events (for rename)
+  // :let len    U32 // Size of name field
+
+  // // Immediately follows the header (but needs to be chopped off as a string).
+  // :let name String
+
+  // // Private constructor to control creation.
+  // :new val _new(@wd, @mask, @cookie, @len, @name)
+
+  // :: Pull an event from the head of the buffer, chopping it off, so that
+  // :: the buffer is left holding only the remaining events / partial data.
+  // ::
+  // :: Raises an error (without chopping anything) if there's not enough data yet.
+  // :fun non chop_from_buffer!(buffer Bytes'ref)
+  //   // Read the length first to fail fast if there's not enough buffer.
+  //   len = buffer.read_native_u32!(12)
+
+  //   // Read the rest of header data from the event buffer.
+  //   wd = buffer.read_native_u32!(0).i32
+  //   mask = buffer.read_native_u32!(4)
+  //   cookie = buffer.read_native_u32!(8)
+
+  //   // Grab the event buffer (or fail fast if there's not enough buffer).
+  //   event_buffer = buffer.chop_left!(@header_byte_size + len.usize)
+
+  //   // Pull the name off the right side of the event buffer,
+  //   // leaving the event buffer holding only the header data.
+  //   name_bytes = event_buffer.chop_right(@header_byte_size)
+
+  //   // Remove any trailing null bytes from the name.
+  //   name_bytes.truncate(try (
+  //     name_bytes.find_index! -> (byte | byte == 0)
+  //   |
+  //     name_bytes.size
+  //   ))
+
+  //   // Finally, convert the name bytes to a string and store it.
+  //   name = String.from_bytes(--name_bytes)
+
+  //   @_new(wd, mask, cookie, len, name)
+
+  :fun non flag_none                  U32: 0x00000000 // kFSEventStreamEventFlagNone
+  :fun non flag_must_scan_subdirs     U32: 0x00000001 // kFSEventStreamEventFlagMustScanSubDirs
+  :fun non flag_user_dropped          U32: 0x00000002 // kFSEventStreamEventFlagUserDropped
+  :fun non flag_kernel_dropped        U32: 0x00000004 // kFSEventStreamEventFlagKernelDropped
+  :fun non flag_event_ids_wrapped     U32: 0x00000008 // kFSEventStreamEventFlagEventIdsWrapped
+  :fun non flag_history_done          U32: 0x00000010 // kFSEventStreamEventFlagHistoryDone
+  :fun non flag_root_changed          U32: 0x00000020 // kFSEventStreamEventFlagRootChanged
+  :fun non flag_mount                 U32: 0x00000040 // kFSEventStreamEventFlagMount
+  :fun non flag_unmount               U32: 0x00000080 // kFSEventStreamEventFlagUnmount
+  :fun non flag_item_created          U32: 0x00000100 // kFSEventStreamEventFlagItemCreated
+  :fun non flag_item_removed          U32: 0x00000200 // kFSEventStreamEventFlagItemRemoved
+  :fun non flag_item_inode_meta_mod   U32: 0x00000400 // kFSEventStreamEventFlagItemInodeMetaMod
+  :fun non flag_item_renamed          U32: 0x00000800 // kFSEventStreamEventFlagItemRenamed
+  :fun non flag_item_modified         U32: 0x00001000 // kFSEventStreamEventFlagItemModified
+  :fun non flag_item_finder_info_mod  U32: 0x00002000 // kFSEventStreamEventFlagItemFinderInfoMod
+  :fun non flag_item_change_owner     U32: 0x00004000 // kFSEventStreamEventFlagItemChangeOwner
+  :fun non flag_item_xattr_mod        U32: 0x00008000 // kFSEventStreamEventFlagItemXattrMod
+  :fun non flag_item_is_file          U32: 0x00010000 // kFSEventStreamEventFlagItemIsFile
+  :fun non flag_item_is_dir           U32: 0x00020000 // kFSEventStreamEventFlagItemIsDir
+  :fun non flag_item_is_symlink       U32: 0x00040000 // kFSEventStreamEventFlagItemIsSymlink
+  :fun non flag_own_event             U32: 0x00080000 // kFSEventStreamEventFlagOwnEvent
+  :fun non flag_item_is_hardlink      U32: 0x00100000 // kFSEventStreamEventFlagItemIsHardlink
+  :fun non flag_item_is_last_hardlink U32: 0x00200000 // kFSEventStreamEventFlagItemIsLastHardlink
+  :fun non flag_item_cloned           U32: 0x00400000 // kFSEventStreamEventFlagItemCloned
+
+  // TODO: Update the Linux-based methods below to use the MacOS flags above.
+
+  // :fun is_access:        @mask.bit_and(@flag_access).is_nonzero
+  // :fun is_modify:        @mask.bit_and(@flag_modify).is_nonzero
+  // :fun is_attrib:        @mask.bit_and(@flag_attrib).is_nonzero
+  // :fun is_close_write:   @mask.bit_and(@flag_close_write).is_nonzero
+  // :fun is_close_nowrite: @mask.bit_and(@flag_close_nowrite).is_nonzero
+  // :fun is_open:          @mask.bit_and(@flag_open).is_nonzero
+  // :fun is_moved_from:    @mask.bit_and(@flag_moved_from).is_nonzero
+  // :fun is_moved_to:      @mask.bit_and(@flag_moved_to).is_nonzero
+  // :fun is_create:        @mask.bit_and(@flag_create).is_nonzero
+  // :fun is_delete:        @mask.bit_and(@flag_delete).is_nonzero
+  // :fun is_delete_self:   @mask.bit_and(@flag_delete_self).is_nonzero
+  // :fun is_move_self:     @mask.bit_and(@flag_move_self).is_nonzero
+  // :fun is_unmount:       @mask.bit_and(@flag_unmount).is_nonzero
+  // :fun is_q_overflow:    @mask.bit_and(@flag_q_overflow).is_nonzero
+  // :fun is_ignored:       @mask.bit_and(@flag_ignored).is_nonzero
+  // :fun is_dir:           @mask.bit_and(@flag_is_dir).is_nonzero
+
+  :fun non flag_all_relevant_events
+    U32.zero
+      .bit_or(@flag_modify)
+      .bit_or(@flag_attrib)
+      .bit_or(@flag_close_write)
+      .bit_or(@flag_moved_from)
+      .bit_or(@flag_moved_to)
+      .bit_or(@flag_create)
+      .bit_or(@flag_delete)
+
+  // :fun to_standard_flags U16
+  //   flags U16 = 0
+  //   if @is_create (
+  //     flags = flags.bit_or(File.Watcher.Event._flag_added)
+  //   )
+  //   if @is_modify (
+  //     flags = flags.bit_or(File.Watcher.Event._flag_updated)
+  //   )
+  //   if @is_close_write (
+  //     flags = flags.bit_or(File.Watcher.Event._flag_updated)
+  //   )
+  //   if @is_attrib (
+  //     flags = flags.bit_or(File.Watcher.Event._flag_attr_modified)
+  //   )
+  //   if @is_delete (
+  //     flags = flags.bit_or(File.Watcher.Event._flag_removed)
+  //   )
+  //   if @is_moved_to (
+  //     flags = flags.bit_or(File.Watcher.Event._flag_added)
+  //     flags = flags.bit_or(File.Watcher.Event._flag_moved_to)
+  //   )
+  //   if @is_moved_from (
+  //     flags = flags.bit_or(File.Watcher.Event._flag_removed)
+  //     flags = flags.bit_or(File.Watcher.Event._flag_moved_from)
+  //   )
+  //   if @is_dir (
+  //     flags = flags.bit_or(File.Watcher.Event._flag_is_directory)
+  //   )
+  //   flags
+
