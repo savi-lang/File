@@ -1,6 +1,7 @@
 :actor Main
   :new (env Env)
     Spec.Process.run(env, [
+      Spec.Run(File.Path.Spec).new(env)
       Spec.Run(File.Result.Spec).new(env)
       Spec.Run(File.Info.Spec).new(env)
       Spec.Run(File.Loader.Spec).new(env)

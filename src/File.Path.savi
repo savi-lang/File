@@ -67,6 +67,35 @@
   :fun hash USize: @string.hash
   :fun "=="(other File.Path.Any'box): @string == other.string
 
+  :: Return the file extension (everything after the last dot character).
+  ::
+  :: If there is no dot character, returns an empty string.
+  :fun ext_name String
+    @string.reverse_each_byte_with_index -> (byte, index |
+      return @string.trim(index + 1) if byte == '.'
+      return "" if byte == '/' || byte == '\\'
+    )
+    ""
+
+  :: Return the file name (everything after the last slash character),
+  :: including the file extension.
+  ::
+  :: If there is no slash character, returns the entire path string.
+  :fun base_name String
+    @string.reverse_each_byte_with_index -> (byte, index |
+      return @string.trim(index + 1) if byte == '/' || byte == '\\'
+    )
+    @string
+
+  :: Return the directory name (everything before the last slash character).
+  ::
+  :: If there is no slash character, returns an empty string.
+  :fun dir_name String
+    @string.reverse_each_byte_with_index -> (byte, index |
+      return @string.trim(0, index) if byte == '/' || byte == '\\'
+    )
+    ""
+
 :trait val File.Path.Readable
   :is File.Path.Any
   :fun read_permission: _ReadPermission
