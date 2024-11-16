@@ -1,0 +1,26 @@
+:class File.Path.Spec
+  :is Spec
+  :const describes: "File.Path"
+
+  :it "parses out the file extension of a path"
+    assert: File.Path.new(@env.root, "/a/b/c.d.e.txt").ext_name == "txt"
+    assert: File.Path.new(@env.root, "/a/b/c.d.e.").ext_name == ""
+    assert: File.Path.new(@env.root, "/a/b/c.d.e").ext_name == "e"
+    assert: File.Path.new(@env.root, "/a/b/c").ext_name == ""
+    assert: File.Path.new(@env.root, "/a/b/.gitignore").ext_name == "gitignore"
+    assert: File.Path.new(@env.root, "c").ext_name == ""
+    assert: File.Path.new(@env.root, "c.txt").ext_name == "txt"
+
+  :it "parses out the base name (file name) of a path"
+    assert: File.Path.new(@env.root, "/a/b/c.d.e.txt").base_name == "c.d.e.txt"
+    assert: File.Path.new(@env.root, "/a/b/c.d.e").base_name == "c.d.e"
+    assert: File.Path.new(@env.root, "/a/b/c").base_name == "c"
+    assert: File.Path.new(@env.root, "c").base_name == "c"
+    assert: File.Path.new(@env.root, "c.txt").base_name == "c.txt"
+
+  :it "parses out the directory name of a path"
+    assert: File.Path.new(@env.root, "/a/b/c.d.e.txt").dir_name == "/a/b"
+    assert: File.Path.new(@env.root, "/a/b/c.d.e").dir_name == "/a/b"
+    assert: File.Path.new(@env.root, "/a/b/c").dir_name == "/a/b"
+    assert: File.Path.new(@env.root, "c").dir_name == ""
+    assert: File.Path.new(@env.root, "c.txt").dir_name == ""
